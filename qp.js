@@ -26,18 +26,14 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     throw new Error('Aeq and beq must have the same length. Aeq.length = ' + mEq + ', beq.length = ' + beq.length);
   }
 
-  // Initialize primal and dual variables
-  let x = new Array(n).fill(1.0);        // Primal variables
-  let s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
-  let y = new Array(mIneq).fill(1.0);    // Multipliers for inequality constraints
-  let z = new Array(mEq).fill(1.0); // Multipliers for equality constraints
-  let iter = 0;
+  const AineqT = transpose(Aineq);
+  const AeqT = transpose(Aeq);
 
   // Define the function for evaluating the objective and constraints
   function evalFunc(x, s, y, z, mu) {
     const Hx = matrixTimesVector(H, x);
-    const AineqY = matrixTimesVector(transpose(Aineq), y);
-    const AeqZ = matrixTimesVector(transpose(Aeq), z);
+    const AineqTY = matrixTimesVector(AineqT, y);
+    const AeqTZ = matrixTimesVector(AeqT, z);
 
     // Objective
     const f = 0.5 * dot(x, Hx) + dot(c, x); // 0.5 x' H x + c' x
@@ -45,26 +41,16 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     // Residuals
     let rGrad = add(Hx, c); // Hx + Aineq' y + Aeq' z + c
     if (mIneq > 0 ) {
-      rGrad = add(rGrad, AineqY);
+      rGrad = add(rGrad, AineqTY);
     }
     if (mEq > 0 ) {
-      rGrad = add(rGrad, AeqZ);
+      rGrad = add(rGrad, AeqTZ);
     }
     const rIneq = subtract(add(matrixTimesVector(Aineq, x), s), bineq); // Aineq x + s - bineq
     const rEq = subtract(matrixTimesVector(Aeq, x), beq); // Aeq x - beq
     const rS = subtract(elementwiseVectorProduct(s, y), new Array(mIneq).fill(mu)); // SYe - mu e
 
     return { f, rGrad, rIneq, rEq, rS };
-  }
-
-  function setSubmatrix(M, X, startI, startJ) {
-    const m = X.length;
-    for (let i = 0; i < m; i++) {
-      const n = X[i].length;
-      for (let j = 0; j < n; j++) {
-        M[i + startI][j + startJ] = X[i][j];
-      }
-    }
   }
 
   // Construct the augmented KKT system
@@ -75,8 +61,8 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
   const m = n + mIneq + mEq;
   const KKT = zeroMatrix(m, m);
   setSubmatrix(KKT, H, 0, 0);
-  setSubmatrix(KKT, transpose(Aineq), 0, n);
-  setSubmatrix(KKT, transpose(Aeq), 0, n + mIneq);
+  setSubmatrix(KKT, AineqT, 0, n);
+  setSubmatrix(KKT, AeqT, 0, n + mIneq);
   setSubmatrix(KKT, Aineq, n, 0);
   setSubmatrix(KKT, Aeq, n + mIneq, 0);
 
@@ -86,7 +72,8 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     setSubmatrix(KKT, minusYinvS, n, n);
   
     const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
-    const rhs = negate(rGrad.concat(rIneq).concat(rEq));
+    const rIneqMinusYinvrS = subtract(rIneq, elementwiseVectorDivision(rS, y)); // Aineq x + s - bineq - Y^-1 (SYe - mue)
+    const rhs = negate(rGrad.concat(rIneqMinusYinvrS).concat(rEq));
 
     // Solve the KKT system
     const d = solveSymmetricIndefinite(KKT, rhs);
@@ -95,7 +82,7 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     const dx = d.slice(0, n);
     const dy = d.slice(n, n + mIneq);
     const dz = d.slice(n + mIneq, n + mIneq + mEq);
-    const ds = negate(elementwiseVectorDivision(y, add(rS, elementwiseVectorProduct(s, dy)))); // -Y^-1 (rS + S dy)
+    const ds = negate(elementwiseVectorDivision(add(rS, elementwiseVectorProduct(s, dy)), y)); // -Y^-1 (rS + S dy)
 
     return { dx, ds, dy, dz, ds };
   }
@@ -123,16 +110,26 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     return alpha * Math.min(maxYStep, maxSStep);
   }
 
-  // Perform the interior point optimization
+  // Initialize primal and dual variables
+  const x = new Array(n).fill(1.0);        // Primal variables
+  const s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
+  const y = new Array(mIneq).fill(1.0);    // Multipliers for inequality constraints
+  const z = new Array(mEq).fill(1.0); // Multipliers for equality constraints
+
+  // Initialize barrier parameter
+  const sigma = 0.7;
   let mu = dot(s, y) / mIneq;
-  const sigma = 0.95;
+
+  // Perform the interior point optimization
+  let iter = 0;
   while (iter < maxIter) {
     mu = sigma * mu;
+    //mu = (mIneq > 0 ? dot(s, y) / mIneq : mu) * sigma;
     iter++;
 
     // Compute the objective and residuals
     const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
-    console.log('f: ' + f)
+    console.log('f: ' + f);
 
     // Check the convergence criterion
     const normRes = norm(rGrad.concat(rIneq).concat(rEq));
@@ -155,7 +152,7 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     vectorPlusEqScalarTimesVector(z, stepSize, dz);
   }
 
-  // Return the optimal solution and objective value
+  // Return the solution and objective value
   const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
   return { x, f, iter };
 }
@@ -168,6 +165,33 @@ function zeroVector(n) {
 
 function zeroMatrix(m, n) {
   return new Array(m).fill().map(() => new Array(n).fill(0.0));
+}
+
+function setSubmatrix(M, X, startI, startJ) {
+  const m = X.length;
+  if (M.length < m + startI) {
+    throw new Error('Invalid submatrix row');
+  }
+  for (let i = 0; i < m; i++) {
+    const si = i + startI;
+    const n = X[i].length;
+    if (M[si].length < n + startJ) {
+      throw new Error('Invalid submatrix column');
+    }
+    for (let j = 0; j < n; j++) {
+      M[si][j + startJ] = X[i][j];
+    }
+  }
+}
+
+function setSubdiagonal(M, d, startI, startJ) {
+  const m = d.length;
+  if (M.length < m + startI) {
+    throw new Error('Invalid submatrix row');
+  }
+  for (let i = 0; i < m; i++) {
+    M[i + startI][i + startJ] = d[i];
+  }
 }
 
 function isVector(x) {
@@ -249,6 +273,10 @@ function matrixTimesVector(A, x) {
 function add(x, y) {
   assertAreEqualLengthVectors(x, y);
   return x.map((value, index) => value + y[index]);
+}
+
+function addVectors(...vectors) {
+  return vectors.reduce((acc, vec) => add(acc, vec));
 }
 
 function subtract(x, y) {
@@ -534,19 +562,25 @@ function solve() {
   Q[1][1] = 4;
   const c = zeroVector(2);
   c[0] = -2;
-  /*const Aineq = zeroMatrix(1,2);
-  Aineq[0][1] = 1;
-  const bineq = zeroVector(1);
-  bineq[0] = 0;
-  */
-  const Aineq = zeroMatrix(0,0);
-  const bineq = zeroVector(0);
-  //const Aeq = zeroMatrix(0,0);
-  //const beq = zeroVector(0);
-  const Aeq = zeroMatrix(1,2);
-  const beq = zeroVector(1);
-  Aeq[0][0] = 1;
-  Aeq[0][1] = 1;
+  let Aineq = zeroMatrix(0,0);
+  let bineq = zeroVector(0);
+  if (true) {
+    // x <= -1
+    Aineq = zeroMatrix(1,2);
+    Aineq[0][0] = 1;
+    bineq = zeroVector(1);
+    bineq[0] = -1;
+  }
+
+  let Aeq = zeroMatrix(0,0);
+  let beq = zeroVector(0);
+  if (true) {
+    // x + y = 0
+    Aeq = zeroMatrix(1,2);
+    beq = zeroVector(1);
+    Aeq[0][0] = 1;
+    Aeq[0][1] = 1;
+  }
   solutionElement = document.getElementById("solution");
   try {
     const {x, f, iter} = interiorPointQP(Q, c, Aineq, bineq, Aeq, beq);
