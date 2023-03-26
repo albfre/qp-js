@@ -1,4 +1,4 @@
-function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
+function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=1000) {
   /* minimize 0.5 x' H x + c' x
    *   st     Aineq x <= bineq
    *          Aeq x = beq
@@ -68,8 +68,8 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
 
   // Define the function for computing the search direction
   function computeSearchDirection(x, s, y, z, mu) {
-    const minusYinvS = diag(negate(elementwiseVectorDivision(s, y)));
-    setSubmatrix(KKT, minusYinvS, n, n);
+    const minusYinvS = negate(elementwiseVectorDivision(s, y));
+    setSubdiagonal(KKT, minusYinvS, n, n);
   
     const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
     const rIneqMinusYinvrS = subtract(rIneq, elementwiseVectorDivision(rS, y)); // Aineq x + s - bineq - Y^-1 (SYe - mue)
@@ -117,14 +117,13 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
   const z = new Array(mEq).fill(1.0); // Multipliers for equality constraints
 
   // Initialize barrier parameter
-  const sigma = 0.7;
+  const sigma = 0.8;
   let mu = dot(s, y) / mIneq;
 
   // Perform the interior point optimization
   let iter = 0;
   while (iter < maxIter) {
-    mu = sigma * mu;
-    //mu = (mIneq > 0 ? dot(s, y) / mIneq : mu) * sigma;
+    mu = (mIneq > 0 ? dot(s, y) / mIneq : mu) * sigma;
     iter++;
 
     // Compute the objective and residuals
@@ -555,6 +554,7 @@ function solveSymmetricIndefinite(A, b) {
     */
 
 function solve() {
+  /*
   const Q = zeroMatrix(2, 2);
   Q[0][0] = 8;
   Q[0][1] = 2;
@@ -581,9 +581,42 @@ function solve() {
     Aeq[0][0] = 1;
     Aeq[0][1] = 1;
   }
+  */
+  let n = 100;
+  const Q = zeroMatrix(n, n);
+  const c = zeroVector(n);
+  const Aineq = zeroMatrix(n, n);
+  const bineq = zeroVector(n);
+  for (let i = 0; i < n; ++i) {
+    Q[i][n-i-1] = 1.2 + 0.1;
+    Q[n-i-1][i] = 1.2 + 0.1;
+
+    Q[i][i] = i + 3;
+    c[i] = -0.5 * i;
+    Aineq[i][i] = -1; // -x[i] <= -i => x[i] >= i
+    bineq[i] = -i * i * 0.01;
+  }
+  let Aeq = zeroMatrix(0, 0);
+  let beq = zeroVector(0);
+  /*
+  const Aeq = zeroMatrix(3, n);
+  const beq = zeroVector(3);
+  Aeq[0][1] = 1; // x[0] + x[1] = 0
+  Aeq[0][2] = 1;
+  Aeq[1][3] = 1; // x[0] + x[1] = 0
+  Aeq[1][4] = 1;
+  Aeq[2][5] = 1; // x[0] + x[1] = 0
+  Aeq[2][6] = 1;
+  */
+
   solutionElement = document.getElementById("solution");
+  
   try {
+    const start = performance.now();
     const {x, f, iter} = interiorPointQP(Q, c, Aineq, bineq, Aeq, beq);
+    const end = performance.now();
+    console.log(`Elapsed time: ${end - start} milliseconds`);
+
     solutionElement.innerHTML = 'x: ' + x + ', obj: ' + f + ', iters: ' + iter;
   } catch (error) {
     solutionElement.innerHTML = `Error: ${error.message}`;
