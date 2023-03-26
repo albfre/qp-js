@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Quadratic Programming Solver</title>
+</head>
+<body>
+  <h1>Quadratic Programming Solver</h1>
+  <form>
+    <h2>Objective Function</h2>
+    <p>minimize <input type="text" id="objective"></p>
+    <!--
+    <h2>Inequality Constraints</h2>
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Variable 1</th>
+          <th>Variable 2</th>
+        </tr>
+      </thead>
+      <tbody id="inequalities">
+        <tr>
+          <td><input type="radio" name="inequality-type-0" value="leq" checked></td>
+          <td><input type="number" name="inequality-0-1" value="0"></td>
+          <td><input type="number" name="inequality-0-2" value="0"></td>
+        </tr>
+      </tbody>
+    </table>
+    <button type="button" id="add-inequality">Add Inequality Constraint</button>
+    <h2>Equality Constraints</h2>
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Variable 1</th>
+          <th>Variable 2</th>
+        </tr>
+      </thead>
+      <tbody id="equalities">
+        <tr>
+          <td><input type="radio" name="equality-type-0" value="eq" checked></td>
+          <td><input type="number" name="equality-0-1" value="0"></td>
+          <td><input type="number" name="equality-0-2" value="0"></td>
+        </tr>
+      </tbody>
+    </table>
+    <button type="button" id="add-equality">Add Equality Constraint</button>
+    -->
+    <button type="button" id="solve">Solve</button>
+  </form>
+  <h2>Solution</h2>
+  <p id="solution"></p>
+  <script src="qp.js"></script>
+</body>
+</html>
