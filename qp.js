@@ -4,10 +4,15 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
    *          Aeq x = beq
    */
 
-  // Initialize the algorithm parameters
+  // Matrix sizes
   const n = H.length;
   const mIneq = Aineq.length;
   const mEq = Aeq.length;
+
+  // Preconditions
+  if (H.some(row => row.length != n)) {
+    throw new Error('H is not a square matrix');
+  }
   if (Aineq.some(row => row.length != n)) {
     throw new Error('All rows of Aineq must have the same length as H');
   }
@@ -20,28 +25,30 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
   if (beq.length !== mEq) {
     throw new Error('Aeq and beq must have the same length. Aeq.length = ' + mEq + ', beq.length = ' + beq.length);
   }
-  let x = new Array(n).fill(1.0);
-  let s = new Array(mIneq).fill(1.0); // slack variables for inequality constraints
-  let y = new Array(mIneq).fill(1.0); // multipliers for inequality constraints
-  let lambda = new Array(mEq).fill(1.0); // multipliers for equality constraints
+
+  // Initialize primal and dual variables
+  let x = new Array(n).fill(1.0);        // Primal variables
+  let s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
+  let y = new Array(mIneq).fill(1.0);    // Multipliers for inequality constraints
+  let z = new Array(mEq).fill(1.0); // Multipliers for equality constraints
   let iter = 0;
 
   // Define the function for evaluating the objective and constraints
-  function evalFunc(x, s, y, lambda, mu) {
+  function evalFunc(x, s, y, z, mu) {
     const Hx = matrixTimesVector(H, x);
     const AineqY = matrixTimesVector(transpose(Aineq), y);
-    const AeqLambda = matrixTimesVector(transpose(Aeq), lambda);
+    const AeqZ = matrixTimesVector(transpose(Aeq), z);
 
     // Objective
     const f = 0.5 * dot(x, Hx) + dot(c, x); // 0.5 x' H x + c' x
 
     // Residuals
-    let rGrad = add(Hx, c); // Hx + Aineq' y + Aeq' lambda + c
+    let rGrad = add(Hx, c); // Hx + Aineq' y + Aeq' z + c
     if (mIneq > 0 ) {
       rGrad = add(rGrad, AineqY);
     }
     if (mEq > 0 ) {
-      rGrad = add(rGrad, AeqLambda);
+      rGrad = add(rGrad, AeqZ);
     }
     const rIneq = subtract(add(matrixTimesVector(Aineq, x), s), bineq); // Aineq x + s - bineq
     const rEq = subtract(matrixTimesVector(Aeq, x), beq); // Aeq x - beq
@@ -60,22 +67,25 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     }
   }
 
+  // Construct the augmented KKT system
+  /*  [ H       Aineq'     Aeq']
+   *  [ Aineq  -Y^-1 S      0  ]
+   *  [ Aeq       0         0  ]
+  */
+  const m = n + mIneq + mEq;
+  const KKT = zeroMatrix(m, m);
+  setSubmatrix(KKT, H, 0, 0);
+  setSubmatrix(KKT, transpose(Aineq), 0, n);
+  setSubmatrix(KKT, transpose(Aeq), 0, n + mIneq);
+  setSubmatrix(KKT, Aineq, n, 0);
+  setSubmatrix(KKT, Aeq, n + mIneq, 0);
+
   // Define the function for computing the search direction
-  function computeDirection(x, s, y, lambda, mu) {
+  function computeSearchDirection(x, s, y, z, mu) {
     const minusYinvS = diag(negate(elementwiseVectorDivision(s, y)));
-
-    // Construct the augmented KKT system
-    const m = n + mIneq + mEq;
-    const KKT = zeroMatrix(m, m);
-    setSubmatrix(KKT, H, 0, 0);
-    setSubmatrix(KKT, transpose(Aineq), 0, n);
-    setSubmatrix(KKT, transpose(Aeq), 0, n + mIneq);
-    setSubmatrix(KKT, Aineq, n, 0);
     setSubmatrix(KKT, minusYinvS, n, n);
-    setSubmatrix(KKT, Aeq, n + mIneq, 0);
   
-    const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, lambda, mu);
-
+    const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
     const rhs = negate(rGrad.concat(rIneq).concat(rEq));
 
     // Solve the KKT system
@@ -84,14 +94,14 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     // Extract the search direction components
     const dx = d.slice(0, n);
     const dy = d.slice(n, n + mIneq);
-    const dlambda = d.slice(n + mIneq, n + mIneq + mEq);
+    const dz = d.slice(n + mIneq, n + mIneq + mEq);
     const ds = negate(elementwiseVectorDivision(y, add(rS, elementwiseVectorProduct(s, dy)))); // -Y^-1 (rS + S dy)
 
-    return { dx, ds, dy, dlambda, ds };
+    return { dx, ds, dy, dz, ds };
   }
 
   // Define the function for computing the step size
-  function computeStepSize(x, s, y, lambda, dx, ds, dy, dlambda) {
+  function computeStepSize(x, s, y, z, dx, ds, dy, dz) {
     const alpha = 0.995;
 
     function getMaxStep(v, dv) {
@@ -120,8 +130,8 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     mu = sigma * mu;
     iter++;
 
-    // Compute the objective and constraints
-    const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, lambda, mu);
+    // Compute the objective and residuals
+    const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
     console.log('f: ' + f)
 
     // Check the convergence criterion
@@ -133,20 +143,20 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=100) {
     }
 
     // Compute the search direction
-    const { dx, ds, dy, dlambda } = computeDirection(x, s, y, lambda, mu);
+    const { dx, ds, dy, dz } = computeSearchDirection(x, s, y, z, mu);
 
     // Compute the step size
-    const stepSize = computeStepSize(x, s, y, lambda, dx, ds, dy, dlambda);
+    const stepSize = computeStepSize(x, s, y, z, dx, ds, dy, dz);
 
     // Update the variables
-    x = vectorPlusScalarTimesVector(x, stepSize, dx);
-    s = vectorPlusScalarTimesVector(s, stepSize, ds);
-    y = vectorPlusScalarTimesVector(y, stepSize, dy);
-    lambda = vectorPlusScalarTimesVector(lambda, stepSize, dlambda);
+    vectorPlusEqScalarTimesVector(x, stepSize, dx);
+    vectorPlusEqScalarTimesVector(s, stepSize, ds);
+    vectorPlusEqScalarTimesVector(y, stepSize, dy);
+    vectorPlusEqScalarTimesVector(z, stepSize, dz);
   }
 
   // Return the optimal solution and objective value
-  const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, lambda, mu);
+  const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
   return { x, f, iter };
 }
 
@@ -223,9 +233,11 @@ function elementwiseVectorDivision(x, y) {
   return x.map((value, index) => value / y[index]);
 }
 
-function vectorPlusScalarTimesVector(x, s, y) {
+function vectorPlusEqScalarTimesVector(x, s, y) {
   assertAreEqualLengthVectors(x, y);
-  return x.map((value, index) => value + s * y[index]);
+  for (let i = 0; i < x.length; i++) {
+    x[i] += s * y[i];
+  }
 }
 
 function matrixTimesVector(A, x) {
