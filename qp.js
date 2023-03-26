@@ -1,4 +1,4 @@
-function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
+function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
   /* minimize 0.5 x' H x + c' x
    *   st    Aeq x = beq
    *         Aineq x >= bineq
@@ -41,7 +41,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
     const f = 0.5 * dot(x, Hx) + dot(c, x); // 0.5 x' H x + c' x
 
     // Residuals
-    let rGrad = add(Hx, c); // Hx + Aeq' y - Aineq' z + c
+    let rGrad = add(Hx, c); // Hx + c + Aeq' y - Aineq' z
     if (mEq > 0 ) {
       rGrad = add(rGrad, AeqTy);
     }
@@ -67,18 +67,18 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
   setSubmatrix(KKT, AineqT, 0, n + mEq);
   setSubmatrix(KKT, Aeq, n, 0);
   setSubmatrix(KKT, Aineq, n + mEq, 0);
-
-  // Define the function for computing the search direction
-  function computeSearchDirection(x, s, y, z, mu) {
+  function updateMatrix(s, z) {
     const minusZinvS = negate(elementwiseVectorDivision(s, z));
     setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
-  
-    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, mu);
+  }
+
+  // Define the function for computing the search direction
+  function computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rS) {
     const rIneqMinusYinvrS = add(rIneq, elementwiseVectorDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
     const rhs = negate(rGrad.concat(rEq).concat(rIneqMinusYinvrS));
 
     // Solve the KKT system
-    const d = solveSymmetricIndefinite(KKT, rhs);
+    const d = solveSymmetricIndefiniteUsingFactorization(L, D, p, rhs);
 
     // Extract the search direction components
     const dx = d.slice(0, n);
@@ -86,15 +86,13 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
     const dz = negate(d.slice(n + mEq, n + mEq + mIneq));
     const ds = negate(elementwiseVectorDivision(add(rS, elementwiseVectorProduct(s, dz)), z)); // -Z^-1 (rS + S dz)
 
-    return { dx, ds, dy, dz, ds };
+    return { dx, ds, dy, dz };
   }
 
   // Define the function for computing the step size
-  function computeStepSize(x, s, y, z, dx, ds, dy, dz) {
-    const fractionToBoundary = 0.995;
-
+  function computeMaxStepSize(s, z, ds, dz) {
     function getMaxStep(v, dv) {
-      let n = v.length;
+      const n = v.length;
       let maxStep = 1.0;
       for (let i = 0; i < n; i++) {
         if (dv[i] < 0) {
@@ -109,7 +107,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
     const maxSStep = getMaxStep(s, ds);
 
     // Compute the step size
-    return fractionToBoundary * Math.min(maxZStep, maxSStep);
+    return Math.min(maxZStep, maxSStep);
   }
 
   // Initialize primal and dual variables
@@ -117,33 +115,55 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
   const s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
   const y = new Array(mEq).fill(1.0);    // Multipliers for equality constraints
   const z = new Array(mIneq).fill(1.0); // Multipliers for inequality constraints
-
-  // Initialize barrier parameter
-  const sigma = 0.8;
-  let mu = 1;
+  
+  function getMu(s, z) {
+    return mIneq > 0 ? dot(s, z) / mIneq : 0;
+  }
 
   // Perform the interior point optimization
   let iter = 0;
   while (iter < maxIter) {
-    mu = (mIneq > 0 ? dot(s, z) / mIneq : 0);
     iter++;
 
-    // Compute the objective and residuals
-    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, mu);
-    console.log('f: ' + f);
+    {
+      // Compute the objective and residuals
+      const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
 
-    // Check the convergence criterion
-    const normRes = norm(rGrad.concat(rEq).concat(rIneq));
-    console.log('res: ' + normRes + ', gap: ' + mu )
-    if (normRes <= tol && mu <= tol) {
-      break;
+      // Check the convergence criterion
+      const normRes = norm(rGrad.concat(rEq).concat(rIneq));
+      const gap = getMu(s, z);
+      console.log('f: ' + f + ', res: ' + normRes + ', gap: ' + gap )
+      if (normRes <= tol && gap <= tol) {
+        break;
+      }
     }
 
-    // Compute the search direction
-    const { dx, ds, dy, dz } = computeSearchDirection(x, s, y, z, mu * sigma);
+    // Update and factorize KKT matrix
+    updateMatrix(s, z);
+    [L, D, p] = symmetricIndefiniteFactorization(KKT);
+
+    // Use the predictor-corrector method
+
+    // Compute affine scaling step
+    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
+    const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rS);
+    const alphaAff = computeMaxStepSize(s, z, dsAff, dzAff);
+    const zAff = Array.from(z);
+    const sAff = Array.from(s);
+    vectorPlusEqScalarTimesVector(zAff, alphaAff, dzAff);
+    vectorPlusEqScalarTimesVector(sAff, alphaAff, dsAff);
+    const muAff = getMu(zAff, sAff);
+
+    // Compute aggregated centering-corrector direction
+    const mu = getMu(s, z);
+    const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
+    const { rS : rSCenter } = evalFunc(x, s, y, z, sigma * mu);
+    const rSCenterCorr = add(elementwiseVectorProduct(dzAff, dsAff), rS);
+    const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rSCenterCorr);
 
     // Compute the step size
-    const stepSize = computeStepSize(x, s, y, z, dx, ds, dy, dz);
+    const fractionToBoundary = 0.995;
+    const stepSize = fractionToBoundary * computeMaxStepSize(s, z, ds, dz);
 
     // Update the variables
     vectorPlusEqScalarTimesVector(x, stepSize, dx);
@@ -153,7 +173,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
   }
 
   // Return the solution and objective value
-  const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, mu);
+  const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
   return { x, f, iter };
 }
 
