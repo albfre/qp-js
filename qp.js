@@ -1,7 +1,7 @@
-function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=1000) {
+function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=1000) {
   /* minimize 0.5 x' H x + c' x
-   *   st     Aineq x <= bineq
-   *          Aeq x = beq
+   *   st    Aeq x = beq
+   *         Aineq x >= bineq
    */
 
   // Matrix sizes
@@ -32,64 +32,66 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=1000) {
   // Define the function for evaluating the objective and constraints
   function evalFunc(x, s, y, z, mu) {
     const Hx = matrixTimesVector(H, x);
-    const AineqTY = matrixTimesVector(AineqT, y);
-    const AeqTZ = matrixTimesVector(AeqT, z);
+    const Aeqx = matrixTimesVector(Aeq, x);
+    const Aineqx = matrixTimesVector(Aineq, x);
+    const AeqTy = matrixTimesVector(AeqT, y);
+    const AineqTz = matrixTimesVector(AineqT, z);
 
     // Objective
     const f = 0.5 * dot(x, Hx) + dot(c, x); // 0.5 x' H x + c' x
 
     // Residuals
-    let rGrad = add(Hx, c); // Hx + Aineq' y + Aeq' z + c
-    if (mIneq > 0 ) {
-      rGrad = add(rGrad, AineqTY);
-    }
+    let rGrad = add(Hx, c); // Hx + Aeq' y - Aineq' z + c
     if (mEq > 0 ) {
-      rGrad = add(rGrad, AeqTZ);
+      rGrad = add(rGrad, AeqTy);
     }
-    const rIneq = subtract(add(matrixTimesVector(Aineq, x), s), bineq); // Aineq x + s - bineq
-    const rEq = subtract(matrixTimesVector(Aeq, x), beq); // Aeq x - beq
-    const rS = subtract(elementwiseVectorProduct(s, y), new Array(mIneq).fill(mu)); // SYe - mu e
+    if (mIneq > 0 ) {
+      rGrad = subtract(rGrad, AineqTz);
+    }
+    const rEq = subtract(Aeqx, beq); // Aeq x - beq
+    const rIneq = subtract(subtract(Aineqx, s), bineq); // Aineq x - s - bineq
+    const rS = subtract(elementwiseVectorProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
 
-    return { f, rGrad, rIneq, rEq, rS };
+    return { f, rGrad, rEq, rIneq, rS };
   }
 
   // Construct the augmented KKT system
-  /*  [ H       Aineq'     Aeq']
-   *  [ Aineq  -Y^-1 S      0  ]
-   *  [ Aeq       0         0  ]
+  /*  [ H       Aeq'   Aineq' ]
+   *  [ Aeq      0      0     ]
+   *  [ Aineq    0   -Z^-1 S  ]
   */
   const m = n + mIneq + mEq;
   const KKT = zeroMatrix(m, m);
   setSubmatrix(KKT, H, 0, 0);
-  setSubmatrix(KKT, AineqT, 0, n);
-  setSubmatrix(KKT, AeqT, 0, n + mIneq);
-  setSubmatrix(KKT, Aineq, n, 0);
-  setSubmatrix(KKT, Aeq, n + mIneq, 0);
+  setSubmatrix(KKT, AeqT, 0, n);
+  setSubmatrix(KKT, AineqT, 0, n + mEq);
+  setSubmatrix(KKT, Aeq, n, 0);
+  setSubmatrix(KKT, Aineq, n + mEq, 0);
 
   // Define the function for computing the search direction
   function computeSearchDirection(x, s, y, z, mu) {
-    const minusYinvS = negate(elementwiseVectorDivision(s, y));
-    setSubdiagonal(KKT, minusYinvS, n, n);
+    const minusZinvS = negate(elementwiseVectorDivision(s, z));
+    setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
   
-    const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
-    const rIneqMinusYinvrS = subtract(rIneq, elementwiseVectorDivision(rS, y)); // Aineq x + s - bineq - Y^-1 (SYe - mue)
-    const rhs = negate(rGrad.concat(rIneqMinusYinvrS).concat(rEq));
+    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, mu);
+    const rIneqMinusYinvrS = add(rIneq, elementwiseVectorDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
+    const rhs = negate(rGrad.concat(rEq).concat(rIneqMinusYinvrS));
 
     // Solve the KKT system
     const d = solveSymmetricIndefinite(KKT, rhs);
 
     // Extract the search direction components
     const dx = d.slice(0, n);
-    const dy = d.slice(n, n + mIneq);
-    const dz = d.slice(n + mIneq, n + mIneq + mEq);
-    const ds = negate(elementwiseVectorDivision(add(rS, elementwiseVectorProduct(s, dy)), y)); // -Y^-1 (rS + S dy)
+    const dy = d.slice(n, n + mEq);
+    const dz = negate(d.slice(n + mEq, n + mEq + mIneq));
+    const ds = negate(elementwiseVectorDivision(add(rS, elementwiseVectorProduct(s, dz)), z)); // -Z^-1 (rS + S dz)
 
     return { dx, ds, dy, dz, ds };
   }
 
   // Define the function for computing the step size
   function computeStepSize(x, s, y, z, dx, ds, dy, dz) {
-    const alpha = 0.995;
+    const fractionToBoundary = 0.995;
 
     function getMaxStep(v, dv) {
       let n = v.length;
@@ -102,44 +104,43 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=1000) {
       return maxStep;
     }
 
-    // Compute the maximum step size for y and s
-    const maxYStep = getMaxStep(y, dy);
+    // Compute the maximum step size for z and s
+    const maxZStep = getMaxStep(z, dz);
     const maxSStep = getMaxStep(s, ds);
 
     // Compute the step size
-    return alpha * Math.min(maxYStep, maxSStep);
+    return fractionToBoundary * Math.min(maxZStep, maxSStep);
   }
 
   // Initialize primal and dual variables
   const x = new Array(n).fill(1.0);        // Primal variables
   const s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
-  const y = new Array(mIneq).fill(1.0);    // Multipliers for inequality constraints
-  const z = new Array(mEq).fill(1.0); // Multipliers for equality constraints
+  const y = new Array(mEq).fill(1.0);    // Multipliers for equality constraints
+  const z = new Array(mIneq).fill(1.0); // Multipliers for inequality constraints
 
   // Initialize barrier parameter
   const sigma = 0.8;
-  let mu = dot(s, y) / mIneq;
+  let mu = 1;
 
   // Perform the interior point optimization
   let iter = 0;
   while (iter < maxIter) {
-    mu = (mIneq > 0 ? dot(s, y) / mIneq : mu) * sigma;
+    mu = (mIneq > 0 ? dot(s, z) / mIneq : 0);
     iter++;
 
     // Compute the objective and residuals
-    const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
+    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, mu);
     console.log('f: ' + f);
 
     // Check the convergence criterion
-    const normRes = norm(rGrad.concat(rIneq).concat(rEq));
-    const gap = mIneq > 0 ? dot(s, y) / mIneq : 0;
-    console.log('res: ' + normRes + ', gap: ' + gap)
-    if (normRes <= tol && gap <= tol) {
+    const normRes = norm(rGrad.concat(rEq).concat(rIneq));
+    console.log('res: ' + normRes + ', gap: ' + mu )
+    if (normRes <= tol && mu <= tol) {
       break;
     }
 
     // Compute the search direction
-    const { dx, ds, dy, dz } = computeSearchDirection(x, s, y, z, mu);
+    const { dx, ds, dy, dz } = computeSearchDirection(x, s, y, z, mu * sigma);
 
     // Compute the step size
     const stepSize = computeStepSize(x, s, y, z, dx, ds, dy, dz);
@@ -152,7 +153,7 @@ function interiorPointQP(H, c, Aineq, bineq, Aeq, beq, tol=1e-8, maxIter=1000) {
   }
 
   // Return the solution and objective value
-  const { f, rGrad, rIneq, rEq, rS } = evalFunc(x, s, y, z, mu);
+  const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, mu);
   return { x, f, iter };
 }
 
@@ -281,6 +282,10 @@ function addVectors(...vectors) {
 function subtract(x, y) {
   assertAreEqualLengthVectors(x, y);
   return x.map((value, index) => value - y[index]);
+}
+
+function subtractVectors(...vectors) {
+  return vectors.reduce((acc, vec) => subtract(acc, vec));
 }
 
 function norm(x) {
@@ -593,16 +598,20 @@ function solve() {
 
     Q[i][i] = i + 3;
     c[i] = -0.5 * i;
-    Aineq[i][i] = -1; // -x[i] <= -i => x[i] >= i
-    bineq[i] = -i * i * 0.01;
+    Aineq[i][i] = 1; // x[i] >= i
+    bineq[i] = i * i * 0.01;
   }
   let Aeq = zeroMatrix(0, 0);
   let beq = zeroVector(0);
   /*
-  const Aeq = zeroMatrix(3, n);
-  const beq = zeroVector(3);
-  Aeq[0][1] = 1; // x[0] + x[1] = 0
-  Aeq[0][2] = 1;
+  Aeq = zeroMatrix(1, n);
+  beq = zeroVector(1);
+  Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
+  Aeq[0][2] = -2;
+  Aeq = zeroMatrix(1, n);
+  beq = zeroVector(1);
+  Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
+  Aeq[0][2] = -2;
   Aeq[1][3] = 1; // x[0] + x[1] = 0
   Aeq[1][4] = 1;
   Aeq[2][5] = 1; // x[0] + x[1] = 0
@@ -613,7 +622,7 @@ function solve() {
   
   try {
     const start = performance.now();
-    const {x, f, iter} = interiorPointQP(Q, c, Aineq, bineq, Aeq, beq);
+    const {x, f, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
     const end = performance.now();
     console.log(`Elapsed time: ${end - start} milliseconds`);
 
