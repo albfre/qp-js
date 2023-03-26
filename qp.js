@@ -578,6 +578,31 @@ function solveSymmetricIndefinite(A, b) {
     document.getElementById("add-equality").addEventListener("click", addEquality);
     */
 
+function parseEquation(str) {
+  const pattern = /([+-]?\s*\d*\.?\d*)\s*(?:\*)\s*(\w+)(?:\^(\d+))?/g;
+  let matches = [];
+  while ((match = pattern.exec(str)) !== null) {
+    let [_, coefficient, name, power] = match;
+    power = parseInt(power || "1");
+    if (power < 1 || power > 2) {
+      throw new Error("Power must be 1 or 2. Power = " + power);
+    }
+    matches.push({
+      variable: name,
+      coefficient: parseFloat(coefficient),
+      power: power
+    });
+  }
+  return matches;
+}
+
+function test() {
+  const matches = parseEquation('-5 x + 7*y + 3z^2');
+  for (let i = 0; i < matches.length; i++) {
+    console.log(matches[i]);
+  }
+}
+
 function solve() {
   /*
   const Q = zeroMatrix(2, 2);
@@ -652,4 +677,5 @@ function solve() {
   }
 }
 
+document.getElementById("test").addEventListener("click", test);
 document.getElementById("solve").addEventListener("click", solve);
