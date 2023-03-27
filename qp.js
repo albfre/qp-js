@@ -629,7 +629,6 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
     const start = performance.now();
     const {x, f, res, gap, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
     const end = performance.now();
-    console.log(`Elapsed time: ${end - start} milliseconds`);
 
     let tableStr = '<table>';
     function addRow(str, val) {
@@ -703,7 +702,6 @@ function solve() {
   let constraints = [];
   for (let i = 2; i < table.rows.length; i++) {
     const constraint = document.getElementById(`constraint-${i}`).textContent;
-    console.log(constraint);
     constraints.push(constraint);
   }
   try {
@@ -730,12 +728,6 @@ function addConstraint() {
   const m = table.rows.length;
   const row = table.insertRow(m);
   const constraint = document.getElementById("constraint");
-  /*
-  row.insertCell();
-  const cell = row.insertCell();
-  cell.id = `constraint-${m}`;
-  cell.value = constraint.value;
-  */
   row.innerHTML = `<td></td><td id="constraint-${m}">` + constraint.value + '</td>';
   constraint.value = '';
 }
