@@ -245,7 +245,7 @@ function assertAreEqualLengthVectors(x, y) {
   assertIsVector(y, 'y');
 
   if (x.length !== y.length) {
-    throw new Error('Invalid input shape: x and y must have the same length. x.length = ' + x.length + ", y.length = " + y.length);
+    throw new Error('Invalid input shape: x and y must have the same length. x.length = ' + x.length + ', y.length = ' + y.length);
   }
 }
 
@@ -444,7 +444,7 @@ function symmetricIndefiniteFactorization(A) {
 
     // Check for singularity
     if (d_ii === 0) {
-      throw new Error("Matrix is singular");
+      throw new Error('Matrix is singular');
     }
 
     D[i] = d_ii;
@@ -506,7 +506,7 @@ function solveSymmetricIndefinite(A, b) {
 
     function solve() {
       // Parse the objective function
-      const objectiveStr = document.getElementById("objective").value.trim();
+      const objectiveStr = document.getElementById('objective').value.trim();
       const objectiveCoefficients = objectiveStr.split(/ +/).map(parseFloat);
       const n = objectiveCoefficients.length;
       const P = zeroMatrix(n, n);
@@ -516,12 +516,12 @@ function solveSymmetricIndefinite(A, b) {
         }
       }
       // Parse the inequality constraints
-      const inequalityTable = document.getElementById("inequalities");
+      const inequalityTable = document.getElementById('inequalities');
       const m1 = inequalityTable.rows.length;
       const A1 = zeroMatrix(m1, n);
       const b1 = zeroVector(m1);
       for (let i = 0; i < m1; i++) {
-        const leq = inequalityTable.rows[i].querySelector('input[name="inequality-type-' + i + '"]:checked').value === "leq";
+        const leq = inequalityTable.rows[i].querySelector('input[name="inequality-type-' + i + '"]:checked').value === 'leq';
         const coefficients = Array.from(inequalityTable.rows[i].querySelectorAll('input[type="number"]')).map(parseFloat);
         for (let j = 0; j < n; j++) {
           A1[i][j] = coefficients[j];
@@ -537,7 +537,7 @@ function solveSymmetricIndefinite(A, b) {
       }
 
       // Parse the equality constraints
-      const equalityTable = document.getElementById("equalities");
+      const equalityTable = document.getElementById('equalities');
       const m2 = equalityTable.rows.length;
       const A2 = zeroMatrix(m2, n);
       const b2 = zeroVector(m2);
@@ -550,12 +550,12 @@ function solveSymmetricIndefinite(A, b) {
       }
       // Call the solver
       const solution = interiorPointQP(P, zeroVector(n), A1, b1, A2, b2);
-      document.getElementById("solution").innerHTML = solution.join(", ");
+      document.getElementById('solution').innerHTML = solution.join(', ');
     }
 
     // Define the function to add a new inequality constraint
     function addInequality() {
-      const inequalityTable = document.getElementById("inequalities");
+      const inequalityTable = document.getElementById('inequalities');
       const m = inequalityTable.rows.length;
       const row = inequalityTable.insertRow(m);
       row.innerHTML = '<td><input type="radio" name="inequality-type-' + m + '" value="leq" checked></td>' + 
@@ -578,28 +578,160 @@ function solveSymmetricIndefinite(A, b) {
     document.getElementById("add-equality").addEventListener("click", addEquality);
     */
 
-function parseEquation(str) {
-  const pattern = /([+-]?\s*\d*\.?\d*)\s*(?:\*)\s*(\w+)(?:\^(\d+))?/g;
+function parseTerms(str) {
+  const pattern = /([+-]?\s*\d*\.?\d*)\s*(?:\*)?\s*(\w+)(?:\^(\d+))?/g;
   let matches = [];
   while ((match = pattern.exec(str)) !== null) {
     let [_, coefficient, name, power] = match;
-    power = parseInt(power || "1");
-    if (power < 1 || power > 2) {
-      throw new Error("Power must be 1 or 2. Power = " + power);
+    power = parseInt(power || '1');
+    sign = coefficient.includes('-') ? -1 : 1;
+    coefficient = coefficient.replace('+', '').replace('-', '').replace(/\s/g, '');
+    coefficient = parseFloat(coefficient || '1');
+    if (!(name && coefficient && power)) {
+      throw new Error('Error parsing string: ' + match);
     }
     matches.push({
       variable: name,
-      coefficient: parseFloat(coefficient),
+      coefficient: sign * coefficient,
       power: power
     });
   }
   return matches;
 }
 
+function validateVariables(allVariables, newVariables) {
+  for (let key of newVariables) {
+    if (!allVariables.includes(key)) {
+      throw new Error('Variable "' + key + '" has no quadratic coefficient.');
+    }
+  }
+}
+
+function validatePowers(terms, allowedPowers) {
+  for (let term of terms) {
+    if (!allowedPowers.includes(term.power)) {
+      throw new Error('Disallowed power: ' + term.power + '. Allowed powers: ' + allowedPowers);
+    }
+  }
+}
+
+function addOrInsert(dictionary, term) {
+  dictionary[term.variable] = (term.variable in dictionary)
+    ? dictionary[term.variable] + term.coefficient
+    : term.coefficient;
+}
+
+function parseConstraint(str) {
+  const separator = str.includes('<=') ? '<=' : (str.includes('>=') ? '>=' : '=');
+  const substrings = str.split(separator);
+  if (substrings.length !== 2) {
+    throw new Error('Error in parsing constraint: ' + str + ', substrings: ' + substrings);
+  }
+  const terms = parseTerms(substrings[0]);
+  const rhs = parseFloat(substrings[1]);
+  validatePowers(terms, [1]);
+  let coefficients = {}
+  for (let term of terms) {
+    addOrInsert(coefficients, term);
+  }
+  return { coefficients, separator, rhs };
+}
+
+function parseObjective(str) {
+  const terms = parseTerms(str);
+  let linearCoefficients = {};
+  let quadraticCoefficients = {};
+  validatePowers(terms, [1, 2]);
+  for (let term of terms) {
+    addOrInsert(term.power === 1 ? linearCoefficients : quadraticCoefficients, term);
+  }
+  for (let key in quadraticCoefficients) {
+    if (quadraticCoefficients[key] <= 0) {
+      throw new Error('Variable "' + key + '" has negative quadratic coefficient.');
+    }
+  }
+  const variables = Object.keys(quadraticCoefficients).sort();
+  const m = variables.length;
+
+  const Q = zeroMatrix(m, m);
+  for (let i = 0; i < m; ++i) {
+    Q[i][i] = 2 * quadraticCoefficients[variables[i]];
+  }
+
+  const c = zeroVector(m);
+  const linearKeys = Object.keys(linearCoefficients);
+  validateVariables(variables, linearKeys);
+  for (let key of linearKeys) {
+    const index = variables.indexOf(key);
+    c[index] = linearCoefficients[key];
+  }
+
+  return { Q, c, variables }
+}
+
+function parseConstraints(variables, constraints) {
+  const m = variables.length;
+  let ineqs = [];
+  let eqs = [];
+  for (let constraint of constraints) {
+    const { coefficients, separator, rhs } = parseConstraint(constraint);
+    if (separator == '=') {
+      eqs.push({ coefficients, separator, rhs });
+    }
+    else {
+      ineqs.push({ coefficients, separator, rhs });
+    }
+  }
+
+  function createConstraints(cs) {
+    const A = zeroMatrix(cs.length, m);
+    const b = zeroVector(cs.length);
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      const sign = c.separator == '<=' ? -1 : 1;
+      const constraintVariables = Object.keys(c.coefficients);
+      validateVariables(variables, constraintVariables);
+      for (let v in c.coefficients) {
+        A[i][variables.indexOf(v)] = sign * c.coefficients[v];
+      }
+      b[i] = sign * c.rhs;
+    }
+    return { A, b };
+  }
+
+  const { A: Aeq, b: beq } = createConstraints(eqs);
+  const { A: Aineq, b: bineq } = createConstraints(ineqs);
+
+  return { Aeq, beq, Aineq, bineq };
+}
+
 function test() {
-  const matches = parseEquation('-5 x + 7*y + 3z^2');
-  for (let i = 0; i < matches.length; i++) {
-    console.log(matches[i]);
+  //const { Q, c, variables } = parseObjective('-5 x + 7*y + x^2 + 13x1^2 + 14x2 -   15*x3 + x3^2 + a^2 + 2y^2 + 0.33 x2^2');
+  //const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, ['x + 2 y = 3', '2x + 3*y <= 5', 'x1 - 0.3x3 >= 3']);
+  const { Q, c, variables } = parseObjective('x^2 + 3y^2');
+  const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, ['x + 2*y = 0', 'x >= 2'])
+  console.log('variables: ' + variables);
+  console.log('Q: ' + Q);
+  console.log('c: ' + c);
+  console.log('Aeq: ' + Aeq);
+  console.log('beq: ' + beq);
+  console.log('Aineq: ' + Aineq);
+  console.log('bineq: ' + bineq);
+  solveQP(Q, c, Aeq, beq, Aineq, bineq);
+}
+
+function solveQP(Q, c, Aeq, beq, Aineq, bineq) {
+  solutionElement = document.getElementById("solution");
+  
+  try {
+    const start = performance.now();
+    const {x, f, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
+    const end = performance.now();
+    console.log(`Elapsed time: ${end - start} milliseconds`);
+
+    solutionElement.innerHTML = 'x: ' + x + ', obj: ' + f + ', iters: ' + iter;
+  } catch (error) {
+    solutionElement.innerHTML = `Error: ${error.message}`;
   }
 }
 
@@ -662,19 +794,7 @@ function solve() {
   Aeq[2][5] = 1; // x[0] + x[1] = 0
   Aeq[2][6] = 1;
   */
-
-  solutionElement = document.getElementById("solution");
-  
-  try {
-    const start = performance.now();
-    const {x, f, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
-    const end = performance.now();
-    console.log(`Elapsed time: ${end - start} milliseconds`);
-
-    solutionElement.innerHTML = 'x: ' + x + ', obj: ' + f + ', iters: ' + iter;
-  } catch (error) {
-    solutionElement.innerHTML = `Error: ${error.message}`;
-  }
+  solveQP(Q, c, Aeq, beq, Aineq, bineq);
 }
 
 document.getElementById("test").addEventListener("click", test);
