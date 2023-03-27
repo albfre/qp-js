@@ -421,12 +421,6 @@ function luSolve(A, b) {
   return x;
 }
 
-
-/**
- * Computes the symmetric indefinite factorization of a matrix A using LDL^T decomposition
- * @param {Array<Array<number>>} A - The input matrix
- * @returns {Array<Array<number>>} - An array containing the factorization: [L,D,p]
- */
 function symmetricIndefiniteFactorization(A) {
   const n = A.length;
   const L = Array.from(Array(n), () => new Array(n).fill(0));
@@ -462,14 +456,6 @@ function symmetricIndefiniteFactorization(A) {
   return [L, D, p];
 }
 
-/**
- * Solves a system of linear equations Ax = b using the symmetric indefinite factorization of A
- * @param {Array<Array<number>>} L - The lower-triangular matrix from the factorization
- * @param {Array<number>} D - The diagonal matrix from the factorization
- * @param {Array<number>} p - The permutation vector from the factorization
- * @param {Array<number>} b - The right-hand side vector
- * @returns {Array<number>} - The solution vector x
- */
 function solveSymmetricIndefiniteUsingFactorization(L, D, p, b) {
   const n = L.length;
   const x = new Array(n).fill(0);
@@ -621,22 +607,6 @@ function addOrInsert(dictionary, term) {
     : term.coefficient;
 }
 
-function parseConstraint(str) {
-  const separator = str.includes('<=') ? '<=' : (str.includes('>=') ? '>=' : '=');
-  const substrings = str.split(separator);
-  if (substrings.length !== 2) {
-    throw new Error('Error in parsing constraint: ' + str + ', substrings: ' + substrings);
-  }
-  const terms = parseTerms(substrings[0]);
-  const rhs = parseFloat(substrings[1]);
-  validatePowers(terms, [1]);
-  let coefficients = {}
-  for (let term of terms) {
-    addOrInsert(coefficients, term);
-  }
-  return { coefficients, separator, rhs };
-}
-
 function parseObjective(str) {
   const terms = parseTerms(str);
   let linearCoefficients = {};
@@ -667,6 +637,22 @@ function parseObjective(str) {
   }
 
   return { Q, c, variables }
+}
+
+function parseConstraint(str) {
+  const separator = str.includes('<=') ? '<=' : (str.includes('>=') ? '>=' : '=');
+  const substrings = str.split(separator);
+  if (substrings.length !== 2) {
+    throw new Error('Error in parsing constraint: ' + str + ', substrings: ' + substrings);
+  }
+  const terms = parseTerms(substrings[0]);
+  const rhs = parseFloat(substrings[1]);
+  validatePowers(terms, [1]);
+  let coefficients = {}
+  for (let term of terms) {
+    addOrInsert(coefficients, term);
+  }
+  return { coefficients, separator, rhs };
 }
 
 function parseConstraints(variables, constraints) {
@@ -705,6 +691,21 @@ function parseConstraints(variables, constraints) {
   return { Aeq, beq, Aineq, bineq };
 }
 
+function solveQP(Q, c, Aeq, beq, Aineq, bineq) {
+  solutionElement = document.getElementById("solution");
+  
+  try {
+    const start = performance.now();
+    const {x, f, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
+    const end = performance.now();
+    console.log(`Elapsed time: ${end - start} milliseconds`);
+
+    solutionElement.innerHTML = 'x: ' + x + ', obj: ' + f + ', number of iterations: ' + iter + ', elasped time: ' + (end - start) + ' ms';
+  } catch (error) {
+    solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
+  }
+}
+
 function test() {
   //const { Q, c, variables } = parseObjective('-5 x + 7*y + x^2 + 13x1^2 + 14x2 -   15*x3 + x3^2 + a^2 + 2y^2 + 0.33 x2^2');
   //const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, ['x + 2 y = 3', '2x + 3*y <= 5', 'x1 - 0.3x3 >= 3']);
@@ -720,50 +721,7 @@ function test() {
   solveQP(Q, c, Aeq, beq, Aineq, bineq);
 }
 
-function solveQP(Q, c, Aeq, beq, Aineq, bineq) {
-  solutionElement = document.getElementById("solution");
-  
-  try {
-    const start = performance.now();
-    const {x, f, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
-    const end = performance.now();
-    console.log(`Elapsed time: ${end - start} milliseconds`);
-
-    solutionElement.innerHTML = 'x: ' + x + ', obj: ' + f + ', iters: ' + iter;
-  } catch (error) {
-    solutionElement.innerHTML = `Error: ${error.message}`;
-  }
-}
-
-function solve() {
-  /*
-  const Q = zeroMatrix(2, 2);
-  Q[0][0] = 8;
-  Q[0][1] = 2;
-  Q[1][0] = 2;
-  Q[1][1] = 4;
-  const c = zeroVector(2);
-  c[0] = -2;
-  let Aineq = zeroMatrix(0,0);
-  let bineq = zeroVector(0);
-  if (true) {
-    // x <= -1
-    Aineq = zeroMatrix(1,2);
-    Aineq[0][0] = 1;
-    bineq = zeroVector(1);
-    bineq[0] = -1;
-  }
-
-  let Aeq = zeroMatrix(0,0);
-  let beq = zeroVector(0);
-  if (true) {
-    // x + y = 0
-    Aeq = zeroMatrix(1,2);
-    beq = zeroVector(1);
-    Aeq[0][0] = 1;
-    Aeq[0][1] = 1;
-  }
-  */
+function solveTestProblem() {
   let n = 100;
   const Q = zeroMatrix(n, n);
   const c = zeroVector(n);
@@ -785,17 +743,53 @@ function solve() {
   beq = zeroVector(1);
   Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
   Aeq[0][2] = -2;
-  Aeq = zeroMatrix(1, n);
-  beq = zeroVector(1);
-  Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
-  Aeq[0][2] = -2;
-  Aeq[1][3] = 1; // x[0] + x[1] = 0
-  Aeq[1][4] = 1;
-  Aeq[2][5] = 1; // x[0] + x[1] = 0
-  Aeq[2][6] = 1;
   */
   solveQP(Q, c, Aeq, beq, Aineq, bineq);
 }
 
-document.getElementById("test").addEventListener("click", test);
+function solve() {
+  const objective = document.getElementById("objective").value;
+  const table = document.getElementById("optimization-problem");
+  let constraints = [];
+  for (let i = 2; i < table.rows.length; i++) {
+    const constraint = document.getElementById(`constraint-${i}`).textContent;
+    console.log(constraint);
+    constraints.push(constraint);
+  }
+  try {
+    const { Q, c, variables } = parseObjective(objective);
+    const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, constraints)
+    solveQP(Q, c, Aeq, beq, Aineq, bineq);
+  } catch (error) {
+    solutionElement = document.getElementById("solution");
+    solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
+  }
+}
+
+function clear() {
+  const table = document.getElementById("optimization-problem");
+  for (let i = 2; i < table.rows.length; i++) {
+    table.deleteRow(i);
+  }
+  solutionElement = document.getElementById("solution");
+  solutionElement.innerHTML = '';
+}
+
+function addConstraint() {
+  const table = document.getElementById("optimization-problem");
+  const m = table.rows.length;
+  const row = table.insertRow(m);
+  const constraint = document.getElementById("constraint");
+  /*
+  row.insertCell();
+  const cell = row.insertCell();
+  cell.id = `constraint-${m}`;
+  cell.value = constraint.value;
+  */
+  row.innerHTML = `<td></td><td id="constraint-${m}">` + constraint.value + '</td>';
+  constraint.value = '';
+}
+
+document.getElementById("clear").addEventListener("click", clear);
 document.getElementById("solve").addEventListener("click", solve);
+document.getElementById("add-constraint").addEventListener("click", addConstraint);
