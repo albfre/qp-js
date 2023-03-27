@@ -120,6 +120,12 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     return mIneq > 0 ? dot(s, z) / mIneq : 0;
   }
 
+  function getResidualAndGap(s, z, rGrad, rEq, rIneq) {
+    const res = norm(rGrad.concat(rEq).concat(rIneq));
+    const gap = getMu(s, z);
+    return { res, gap };
+  }
+
   // Perform the interior point optimization
   let iter = 0;
   while (iter < maxIter) {
@@ -130,10 +136,9 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
       const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
 
       // Check the convergence criterion
-      const normRes = norm(rGrad.concat(rEq).concat(rIneq));
-      const gap = getMu(s, z);
-      console.log('f: ' + f + ', res: ' + normRes + ', gap: ' + gap )
-      if (normRes <= tol && gap <= tol) {
+      const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
+      console.log('f: ' + f + ', res: ' + res + ', gap: ' + gap )
+      if (res <= tol && gap <= tol) {
         break;
       }
     }
@@ -174,7 +179,8 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
   // Return the solution and objective value
   const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
-  return { x, f, iter };
+  const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
+  return { x, f, res, gap, iter };
 }
 
 
@@ -621,7 +627,7 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
   
   try {
     const start = performance.now();
-    const {x, f, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
+    const {x, f, res, gap, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
     const end = performance.now();
     console.log(`Elapsed time: ${end - start} milliseconds`);
 
@@ -635,6 +641,8 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
       addRow(variables.length == x.length ? variables[i] : `x${i}`, x[i]);
     }
     addRow('Number of iterations', iter);
+    addRow('Residual', res);
+    addRow('Gap', gap);
     addRow('Elapsed time', `${end - start} milliseconds`);
     addRow('Variable vector', x);
     tableStr += '</table>';
