@@ -616,7 +616,7 @@ function parseConstraints(variables, constraints) {
   return { Aeq, beq, Aineq, bineq };
 }
 
-function solveQP(Q, c, Aeq, beq, Aineq, bineq) {
+function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
   solutionElement = document.getElementById("solution");
   
   try {
@@ -625,7 +625,22 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq) {
     const end = performance.now();
     console.log(`Elapsed time: ${end - start} milliseconds`);
 
-    solutionElement.innerHTML = 'x: ' + x + ', obj: ' + f + ', number of iterations: ' + iter + ', elasped time: ' + (end - start) + ' ms';
+    let tableStr = '<table>';
+    function addRow(str, val) {
+      tableStr += `<tr><td>${str}</td><td>${val}</td></tr>`;
+    }
+
+    addRow('Objective value', f);
+    for (let i = 0; i < x.length; i++) {
+      addRow(variables.length == x.length ? variables[i] : `x${i}`, x[i]);
+    }
+    addRow('Number of iterations', iter);
+    addRow('Elapsed time', `${end - start} milliseconds`);
+    addRow('Variable vector', x);
+    tableStr += '</table>';
+
+    solutionElement.innerHTML = tableStr;
+
   } catch (error) {
     solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
   }
@@ -643,7 +658,7 @@ function test() {
   console.log('beq: ' + beq);
   console.log('Aineq: ' + Aineq);
   console.log('bineq: ' + bineq);
-  solveQP(Q, c, Aeq, beq, Aineq, bineq);
+  solveQP(Q, c, Aeq, beq, Aineq, bineq, variables);
 }
 
 function solveTestProblem() {
@@ -686,7 +701,7 @@ function solve() {
   try {
     const { Q, c, variables } = parseObjective(objective);
     const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, constraints)
-    solveQP(Q, c, Aeq, beq, Aineq, bineq);
+    solveQP(Q, c, Aeq, beq, Aineq, bineq, variables);
   } catch (error) {
     solutionElement = document.getElementById("solution");
     solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
