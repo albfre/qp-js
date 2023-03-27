@@ -487,82 +487,7 @@ function solveSymmetricIndefinite(A, b) {
   return solveSymmetricIndefiniteUsingFactorization(L, D, p, b);
 }
 
-/*
-    // Define the function to parse the user input and call the solver
-
-    function solve() {
-      // Parse the objective function
-      const objectiveStr = document.getElementById('objective').value.trim();
-      const objectiveCoefficients = objectiveStr.split(/ +/).map(parseFloat);
-      const n = objectiveCoefficients.length;
-      const P = zeroMatrix(n, n);
-      for (let i = 0; i < n; i++) {
-        for (let j = 0; j < n; j++) {
-          P[i][j] = objectiveCoefficients[i] * objectiveCoefficients[j];
-        }
-      }
-      // Parse the inequality constraints
-      const inequalityTable = document.getElementById('inequalities');
-      const m1 = inequalityTable.rows.length;
-      const A1 = zeroMatrix(m1, n);
-      const b1 = zeroVector(m1);
-      for (let i = 0; i < m1; i++) {
-        const leq = inequalityTable.rows[i].querySelector('input[name="inequality-type-' + i + '"]:checked').value === 'leq';
-        const coefficients = Array.from(inequalityTable.rows[i].querySelectorAll('input[type="number"]')).map(parseFloat);
-        for (let j = 0; j < n; j++) {
-          A1[i][j] = coefficients[j];
-        }
-        if (leq) {
-          b1[i] = coefficients[n];
-        } else {
-          for (let j = 0; j < n; j++) {
-            A1[i][j] *= -1;
-          }
-          b1[i] = -coefficients[n];
-        }
-      }
-
-      // Parse the equality constraints
-      const equalityTable = document.getElementById('equalities');
-      const m2 = equalityTable.rows.length;
-      const A2 = zeroMatrix(m2, n);
-      const b2 = zeroVector(m2);
-      for (let i = 0; i < m2; i++) {
-        const coefficients = Array.from(equalityTable.rows[i].querySelectorAll('input[type="number"]')).map(parseFloat);
-        for (let j = 0; j < n; j++) {
-          A2[i][j] = coefficients[j];
-        }
-        b2[i] = coefficients[n];
-      }
-      // Call the solver
-      const solution = interiorPointQP(P, zeroVector(n), A1, b1, A2, b2);
-      document.getElementById('solution').innerHTML = solution.join(', ');
-    }
-
-    // Define the function to add a new inequality constraint
-    function addInequality() {
-      const inequalityTable = document.getElementById('inequalities');
-      const m = inequalityTable.rows.length;
-      const row = inequalityTable.insertRow(m);
-      row.innerHTML = '<td><input type="radio" name="inequality-type-' + m + '" value="leq" checked></td>' + 
-                      '<td><input type="number" name="inequality-' + m + '-1" value="0"></td>' + 
-                      '<td><input type="number" name="inequality-' + m + '-2" value="0"></td>';
-    }
-
-    // Define the function to add a new equality constraint
-    function addEquality() {
-      const equalityTable = document.getElementById("equalities");
-      const m = equalityTable.rows.length;
-      const row = equalityTable.insertRow(m);
-      row.innerHTML = '<td><input type="radio" name="equality-type-' + m + '" value="eq" checked></td>' + 
-                      '<td><input type="number" name="equality-' + m + '-1" value="0"></td>' + 
-                      '<td><input type="number" name="equality-' + m + '-2" value="0"></td>';
-    }
-
-    // Add event listeners to the buttons
-    document.getElementById("add-inequality").addEventListener("click", addInequality);
-    document.getElementById("add-equality").addEventListener("click", addEquality);
-    */
+// Parsing of objectives and constraints
 
 function parseTerms(str) {
   const pattern = /([+-]?\s*\d*\.?\d*)\s*(?:\*)?\s*(\w+)(?:\^(\d+))?/g;
@@ -746,6 +671,8 @@ function solveTestProblem() {
   */
   solveQP(Q, c, Aeq, beq, Aineq, bineq);
 }
+
+// Functions relating to buttons on the html page
 
 function solve() {
   const objective = document.getElementById("objective").value;
