@@ -709,7 +709,7 @@ function solve() {
     const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, constraints)
     solveQP(Q, c, Aeq, beq, Aineq, bineq, variables);
   } catch (error) {
-    solutionElement = document.getElementById("solution");
+    let solutionElement = document.getElementById("solution");
     solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
   }
 }
