@@ -623,7 +623,7 @@ function parseConstraints(variables, constraints) {
 }
 
 function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
-  solutionElement = document.getElementById("solution");
+  let solutionElement = document.getElementById("solution");
   
   try {
     const start = performance.now();
