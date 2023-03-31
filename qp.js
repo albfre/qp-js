@@ -148,7 +148,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     const alphaD = getMaxStep(z, dz);
 
     // Compute the step size
-    const fractionToBoundary = 0.9995;
+    const fractionToBoundary = 0.995;
 
     // Update the variables
     vectorPlusEqScalarTimesVector(x, fractionToBoundary * alphaP, dx);
@@ -663,12 +663,10 @@ function solveTestProblem() {
   }
   let Aeq = zeroMatrix(0, 0);
   let beq = zeroVector(0);
-  /*
   Aeq = zeroMatrix(1, n);
   beq = zeroVector(1);
   Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
   Aeq[0][2] = -2;
-  */
   solveQP(Q, c, Aeq, beq, Aineq, bineq);
 }
 
