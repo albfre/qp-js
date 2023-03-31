@@ -60,7 +60,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
    *  [ Aeq      0      0     ]
    *  [ Aineq    0   -Z^-1 S  ]
   */
-  const m = n + mIneq + mEq;
+  const m = n + mEq + mIneq;
   const KKT = zeroMatrix(m, m);
   setSubmatrix(KKT, H, 0, 0);
   setSubmatrix(KKT, AeqT, 0, n);
@@ -90,24 +90,8 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
   }
 
   // Define the function for computing the step size
-  function computeMaxStepSize(s, z, ds, dz) {
-    function getMaxStep(v, dv) {
-      const n = v.length;
-      let maxStep = 1.0;
-      for (let i = 0; i < n; i++) {
-        if (dv[i] < 0) {
-          maxStep = Math.min(maxStep, -v[i] / dv[i]); // v + alpha dv > 0 => alpha > -v/dv
-        }
-      }
-      return maxStep;
-    }
-
-    // Compute the maximum step size for z and s
-    const maxZStep = getMaxStep(z, dz);
-    const maxSStep = getMaxStep(s, ds);
-
-    // Compute the step size
-    return Math.min(maxZStep, maxSStep);
+  function getMaxStep(v, dv) {
+    return v.reduce((m, value, index) => dv[index] < 0 ? Math.min(-value/dv[index], m) : m, 1.0);
   }
 
   // Initialize primal and dual variables
@@ -128,19 +112,14 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
   // Perform the interior point optimization
   let iter = 0;
-  while (iter < maxIter) {
-    iter++;
+  for (; iter < maxIter; iter++) {
+    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
 
-    {
-      // Compute the objective and residuals
-      const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
-
-      // Check the convergence criterion
-      const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
-      console.log('f: ' + f + ', res: ' + res + ', gap: ' + gap )
-      if (res <= tol && gap <= tol) {
-        break;
-      }
+    // Check the convergence criterion
+    const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
+    console.log('f: ' + f + ', res: ' + res + ', gap: ' + gap )
+    if (res <= tol && gap <= tol) {
+      break;
     }
 
     // Update and factorize KKT matrix
@@ -150,13 +129,13 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     // Use the predictor-corrector method
 
     // Compute affine scaling step
-    const { f, rGrad, rEq, rIneq, rS } = evalFunc(x, s, y, z, 0);
     const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rS);
-    const alphaAff = computeMaxStepSize(s, z, dsAff, dzAff);
+    const alphaAffP = getMaxStep(s, dsAff);
+    const alphaAffD = getMaxStep(z, dzAff);
     const zAff = Array.from(z);
     const sAff = Array.from(s);
-    vectorPlusEqScalarTimesVector(zAff, alphaAff, dzAff);
-    vectorPlusEqScalarTimesVector(sAff, alphaAff, dsAff);
+    vectorPlusEqScalarTimesVector(sAff, alphaAffP, dsAff);
+    vectorPlusEqScalarTimesVector(zAff, alphaAffD, dzAff);
     const muAff = getMu(zAff, sAff);
 
     // Compute aggregated centering-corrector direction
@@ -165,16 +144,17 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     const { rS : rSCenter } = evalFunc(x, s, y, z, sigma * mu);
     const rSCenterCorr = add(elementwiseVectorProduct(dzAff, dsAff), rS);
     const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rSCenterCorr);
+    const alphaP = getMaxStep(s, ds);
+    const alphaD = getMaxStep(z, dz);
 
     // Compute the step size
-    const fractionToBoundary = 0.995;
-    const stepSize = fractionToBoundary * computeMaxStepSize(s, z, ds, dz);
+    const fractionToBoundary = 0.9995;
 
     // Update the variables
-    vectorPlusEqScalarTimesVector(x, stepSize, dx);
-    vectorPlusEqScalarTimesVector(s, stepSize, ds);
-    vectorPlusEqScalarTimesVector(y, stepSize, dy);
-    vectorPlusEqScalarTimesVector(z, stepSize, dz);
+    vectorPlusEqScalarTimesVector(x, fractionToBoundary * alphaP, dx);
+    vectorPlusEqScalarTimesVector(s, fractionToBoundary * alphaP, ds);
+    vectorPlusEqScalarTimesVector(y, fractionToBoundary * alphaD, dy);
+    vectorPlusEqScalarTimesVector(z, fractionToBoundary * alphaD, dz);
   }
 
   // Return the solution and objective value
@@ -636,13 +616,13 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
     }
 
     addRow('Objective value', f);
-    for (let i = 0; i < x.length; i++) {
-      addRow(variables.length == x.length ? variables[i] : `x${i}`, x[i]);
-    }
     addRow('Number of iterations', iter);
     addRow('Residual', res);
     addRow('Gap', gap);
     addRow('Elapsed time', `${end - start} milliseconds`);
+    for (let i = 0; i < x.length; i++) {
+      addRow(variables.length == x.length ? variables[i] : `x${i}`, x[i]);
+    }
     addRow('Variable vector', x);
     tableStr += '</table>';
 
@@ -654,10 +634,8 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
 }
 
 function test() {
-  //const { Q, c, variables } = parseObjective('-5 x + 7*y + x^2 + 13x1^2 + 14x2 -   15*x3 + x3^2 + a^2 + 2y^2 + 0.33 x2^2');
-  //const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, ['x + 2 y = 3', '2x + 3*y <= 5', 'x1 - 0.3x3 >= 3']);
-  const { Q, c, variables } = parseObjective('x^2 + 3y^2');
-  const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, ['x + 2*y = 0', 'x >= 2'])
+  const { Q, c, variables } = parseObjective('-5 x + 7*y + x^2 + 13x1^2 + 14x2 -   15*x3 + x3^2 + a^2 + 2y^2 + 0.33 x2^2');
+  const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, ['x + 2 y = 3', '2x + 3*y <= 5', 'x1 - 0.3x3 >= 3']);
   console.log('variables: ' + variables);
   console.log('Q: ' + Q);
   console.log('c: ' + c);
@@ -734,4 +712,5 @@ function addConstraint() {
 
 document.getElementById("clear").addEventListener("click", clear);
 document.getElementById("solve").addEventListener("click", solve);
+document.getElementById("test").addEventListener("click", solveTestProblem);
 document.getElementById("add-constraint").addEventListener("click", addConstraint);
