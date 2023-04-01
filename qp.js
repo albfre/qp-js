@@ -28,7 +28,6 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
   const AineqT = transpose(Aineq);
   const AeqT = transpose(Aeq);
-  const test = false;
 
   // Define the function for evaluating the objective and constraints
   function evalFunc(x, s, y, z, mu) {
@@ -50,9 +49,6 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
       rGrad = subtract(rGrad, AineqTz);
     }
     const rEq = subtract(Aeqx, beq); // Aeq x - beq
-    if (test) {
-      add(rEq, y.map(v => v * mu));
-    }
     const rIneq = subtract(subtract(Aineqx, s), bineq); // Aineq x - s - bineq
     const rS = subtract(elementwiseVectorProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
 
@@ -75,11 +71,6 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
   function updateMatrix(s, z) {
     const minusZinvS = negate(elementwiseVectorDivision(s, z));
     setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
-    if (test) {
-      const mu = mIneq > 0 ? dot(s, z) / mIneq : 0;
-      const mus = new Array(mEq).fill(mu);
-      setSubdiagonal(KKT, mus, n, n);
-    }
   }
 
   // Define the function for computing the search direction
@@ -134,7 +125,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
     // Update and factorize KKT matrix
     updateMatrix(s, z);
-    [L, D] = test ? ldltFactorization(KKT): symmetricIndefiniteFactorization(KKT);
+    [L, D] = symmetricIndefiniteFactorization(KKT);
 
     // Use the predictor-corrector method
 
@@ -335,8 +326,8 @@ function ldltFactorization(A) {
 
 function symmetricIndefiniteFactorization(A) {
   const n = A.length;
-  const L = Array.from(Array(n), () => new Array(n).fill(0));
-  const D = new Array(n).fill(0);
+  const L = zeroMatrix(n, n);
+  const D = zeroVector(n);
 
   for (let i = 0; i < n; i++) {
     // Compute the (i,i) entry of D
