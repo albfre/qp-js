@@ -28,6 +28,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
   const AineqT = transpose(Aineq);
   const AeqT = transpose(Aeq);
+  const test = false;
 
   // Define the function for evaluating the objective and constraints
   function evalFunc(x, s, y, z, mu) {
@@ -49,11 +50,15 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
       rGrad = subtract(rGrad, AineqTz);
     }
     const rEq = subtract(Aeqx, beq); // Aeq x - beq
+    if (test) {
+      add(rEq, y.map(v => v * mu));
+    }
     const rIneq = subtract(subtract(Aineqx, s), bineq); // Aineq x - s - bineq
     const rS = subtract(elementwiseVectorProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
 
     return { f, rGrad, rEq, rIneq, rS };
   }
+
 
   // Construct the augmented KKT system
   /*  [ H       Aeq'   Aineq' ]
@@ -70,15 +75,20 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
   function updateMatrix(s, z) {
     const minusZinvS = negate(elementwiseVectorDivision(s, z));
     setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
+    if (test) {
+      const mu = mIneq > 0 ? dot(s, z) / mIneq : 0;
+      const mus = new Array(mEq).fill(mu);
+      setSubdiagonal(KKT, mus, n, n);
+    }
   }
 
   // Define the function for computing the search direction
-  function computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rS) {
+  function computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rS) {
     const rIneqMinusYinvrS = add(rIneq, elementwiseVectorDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
     const rhs = negate(rGrad.concat(rEq).concat(rIneqMinusYinvrS));
 
     // Solve the KKT system
-    const d = solveSymmetricIndefiniteUsingFactorization(L, D, p, rhs);
+    const d = solveUsingFactorization(L, D, rhs);
 
     // Extract the search direction components
     const dx = d.slice(0, n);
@@ -124,12 +134,12 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
     // Update and factorize KKT matrix
     updateMatrix(s, z);
-    [L, D, p] = symmetricIndefiniteFactorization(KKT);
+    [L, D] = test ? ldltFactorization(KKT): symmetricIndefiniteFactorization(KKT);
 
     // Use the predictor-corrector method
 
     // Compute affine scaling step
-    const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rS);
+    const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rS);
     const alphaAffP = getMaxStep(s, dsAff);
     const alphaAffD = getMaxStep(z, dzAff);
     const zAff = Array.from(z);
@@ -143,14 +153,12 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
     const { rS : rSCenter } = evalFunc(x, s, y, z, sigma * mu);
     const rSCenterCorr = add(elementwiseVectorProduct(dzAff, dsAff), rS);
-    const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, D, p, rGrad, rEq, rIneq, rSCenterCorr);
+    const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rSCenterCorr);
     const alphaP = getMaxStep(s, ds);
     const alphaD = getMaxStep(z, dz);
 
-    // Compute the step size
-    const fractionToBoundary = 0.995;
-
     // Update the variables
+    const fractionToBoundary = 0.995;
     vectorPlusEqScalarTimesVector(x, fractionToBoundary * alphaP, dx);
     vectorPlusEqScalarTimesVector(s, fractionToBoundary * alphaP, ds);
     vectorPlusEqScalarTimesVector(y, fractionToBoundary * alphaD, dy);
@@ -303,119 +311,34 @@ function dot(x, y) {
   return x.reduce((sum, value, index) => sum + value * y[index], 0);
 }
 
-function chol(A) {
+function ldltFactorization(A) {
   const n = A.length;
   const L = zeroMatrix(n, n);
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j <= i; j++) {
-      let s = A[i][j];
-      for (let k = 0; k < j; k++) {
-        s -= L[i][k] * L[j][k];
-      }
-      if (i == j) {
-        L[i][j] = Math.sqrt(s);
-      } else {
-        L[i][j] = s / L[j][j];
-      }
-    }
-  }
-  return L;
-}
-
-function solveChol(L, b) {
-  const n = L.length;
-  const y = zeroVector(n);
-  for (let i = 0; i < n; i++) {
-    let s = b[i];
-    for (let j = 0; j < i; j++) {
-      s -= L[i][j] * y[j];
-    }
-    y[i] = s / L[i][i];
-  }
-  const x = zeroVector(n);
-  for (let i = n - 1; i >= 0; i--) {
-    let s = y[i];
-    for (let j = i + 1; j < n; j++) {
-      s -= L[j][i] * x[j];
-    }
-    x[i] = s / L[i][i];
-  }
-  return x;
-}
-
-function luFactorization(A) {
-  const n = A.length;
-  const L = new Array(n).fill(null).map(() => new Array(n).fill(0));
-  const U = new Array(n).fill(null).map(() => new Array(n).fill(0));
-
-  // Perform Gaussian elimination with partial pivoting
+  const D = zeroVector(n);
   for (let j = 0; j < n; j++) {
-    // Compute the jth column of U
-    for (let i = 0; i <= j; i++) {
-      let sum = 0;
-      for (let k = 0; k < i; k++) {
-        sum += L[i][k] * U[k][j];
-      }
-      U[i][j] = A[i][j] - sum;
+    let s = 0;
+    for (let k = 0; k < j; k++) {
+      s += L[j][k] * L[j][k] * D[k];
     }
-
-    // Compute the jth column of L
+    D[j] = A[j][j] - s;
     for (let i = j + 1; i < n; i++) {
-      let sum = 0;
+      let t = 0;
       for (let k = 0; k < j; k++) {
-        sum += L[i][k] * U[k][j];
+        t += L[i][k] * L[j][k] * D[k];
       }
-      L[i][j] = (A[i][j] - sum) / U[j][j];
+      L[i][j] = (A[i][j] - t) / D[j];
     }
   }
-
-  // Set the diagonal elements of L to 1
-  for (let i = 0; i < n; i++) {
-    L[i][i] = 1;
-  }
-
-  return [L, U];
-}
-
-function luSolve(A, b) {
-  // Perform LU factorization of A
-  const [L, U] = luFactorization(A);
-
-  // Solve Ly = b using forward substitution
-  const n = L.length;
-  const y = new Array(n);
-  y[0] = b[0] / L[0][0];
-  for (let i = 1; i < n; i++) {
-    let sum = 0;
-    for (let j = 0; j < i; j++) {
-      sum += L[i][j] * y[j];
-    }
-    y[i] = (b[i] - sum) / L[i][i];
-  }
-
-  // Solve Ux = y using backward substitution
-  const x = new Array(n);
-  x[n - 1] = y[n - 1] / U[n - 1][n - 1];
-  for (let i = n - 2; i >= 0; i--) {
-    let sum = 0;
-    for (let j = i + 1; j < n; j++) {
-      sum += U[i][j] * x[j];
-    }
-    x[i] = (y[i] - sum) / U[i][i];
-  }
-
-  return x;
+  const p = new Array(n);
+  return [L, D];
 }
 
 function symmetricIndefiniteFactorization(A) {
   const n = A.length;
   const L = Array.from(Array(n), () => new Array(n).fill(0));
   const D = new Array(n).fill(0);
-  const p = new Array(n);
 
   for (let i = 0; i < n; i++) {
-    p[i] = i;
-
     // Compute the (i,i) entry of D
     let d_ii = A[i][i];
     for (let k = 0; k < i; k++) {
@@ -439,21 +362,21 @@ function symmetricIndefiniteFactorization(A) {
     }
   }
 
-  return [L, D, p];
+  return [L, D];
 }
 
-function solveSymmetricIndefiniteUsingFactorization(L, D, p, b) {
+function solveUsingFactorization(L, D, b) {
   const n = L.length;
   const x = new Array(n).fill(0);
   const y = new Array(n).fill(0);
 
-  // Forward substitution: solve Ly = Pb
+  // Forward substitution: solve Ly = b
   for (let i = 0; i < n; i++) {
     let sum = 0;
     for (let j = 0; j < i; j++) {
       sum += L[i][j] * y[j];
     }
-    y[i] = b[p[i]] - sum;
+    y[i] = b[i] - sum;
   }
 
   // Backward substitution: solve L^Tx = y
@@ -469,8 +392,8 @@ function solveSymmetricIndefiniteUsingFactorization(L, D, p, b) {
 }
 
 function solveSymmetricIndefinite(A, b) {
-  [L, D, p] = symmetricIndefiniteFactorization(A);
-  return solveSymmetricIndefiniteUsingFactorization(L, D, p, b);
+  [L, D] = symmetricIndefiniteFactorization(A);
+  return solveSymmetricIndefiniteUsingFactorization(L, D, b);
 }
 
 // Parsing of objectives and constraints
