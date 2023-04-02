@@ -411,7 +411,7 @@ function parseTerms(str) {
 }
 
 function validateVariables(allVariables, newVariables) {
-  for (let key of newVariables) {
+  for (const key of newVariables) {
     if (!allVariables.includes(key)) {
       throw new Error('Variable "' + key + '" has no quadratic coefficient.');
     }
@@ -419,7 +419,7 @@ function validateVariables(allVariables, newVariables) {
 }
 
 function validatePowers(terms, allowedPowers) {
-  for (let term of terms) {
+  for (const term of terms) {
     if (!allowedPowers.includes(term.power)) {
       throw new Error('Disallowed power: ' + term.power + '. Allowed powers: ' + allowedPowers);
     }
@@ -437,10 +437,10 @@ function parseObjective(str) {
   let linearCoefficients = {};
   let quadraticCoefficients = {};
   validatePowers(terms, [1, 2]);
-  for (let term of terms) {
+  for (const term of terms) {
     addOrInsert(term.power === 1 ? linearCoefficients : quadraticCoefficients, term);
   }
-  for (let key in quadraticCoefficients) {
+  for (const key in quadraticCoefficients) {
     if (quadraticCoefficients[key] <= 0) {
       throw new Error('Variable "' + key + '" has negative quadratic coefficient.');
     }
@@ -456,7 +456,7 @@ function parseObjective(str) {
   const c = zeroVector(m);
   const linearKeys = Object.keys(linearCoefficients);
   validateVariables(variables, linearKeys);
-  for (let key of linearKeys) {
+  for (const key of linearKeys) {
     const index = variables.indexOf(key);
     c[index] = linearCoefficients[key];
   }
@@ -474,7 +474,7 @@ function parseConstraint(str) {
   const rhs = parseFloat(substrings[1]);
   validatePowers(terms, [1]);
   let coefficients = {}
-  for (let term of terms) {
+  for (const term of terms) {
     addOrInsert(coefficients, term);
   }
   return { coefficients, separator, rhs };
@@ -484,7 +484,7 @@ function parseConstraints(variables, constraints) {
   const m = variables.length;
   let ineqs = [];
   let eqs = [];
-  for (let constraint of constraints) {
+  for (const constraint of constraints) {
     const { coefficients, separator, rhs } = parseConstraint(constraint);
     if (separator == '=') {
       eqs.push({ coefficients, separator, rhs });
@@ -502,7 +502,7 @@ function parseConstraints(variables, constraints) {
       const sign = c.separator == '<=' ? -1 : 1;
       const constraintVariables = Object.keys(c.coefficients);
       validateVariables(variables, constraintVariables);
-      for (let v in c.coefficients) {
+      for (const v in c.coefficients) {
         A[i][variables.indexOf(v)] = sign * c.coefficients[v];
       }
       b[i] = sign * c.rhs;
