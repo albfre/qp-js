@@ -164,12 +164,20 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
 
 // Helper functions for linear algebra operations
+function filledVector(n, v) {
+  return new Array(n).fill(v);
+}
+
 function zeroVector(n) {
-  return new Array(n).fill(0.0);
+  return filledVector(n, 0.0);
+}
+
+function filledMatrix(m, n, v) {
+  return new Array(m).fill().map(() => new Array(n).fill(v));
 }
 
 function zeroMatrix(m, n) {
-  return new Array(m).fill().map(() => new Array(n).fill(0.0));
+  return filledMatrix(m, n, 0.0);
 }
 
 function setSubmatrix(M, X, startI, startJ) {
@@ -302,28 +310,6 @@ function dot(x, y) {
   return x.reduce((sum, value, index) => sum + value * y[index], 0);
 }
 
-function ldltFactorization(A) {
-  const n = A.length;
-  const L = zeroMatrix(n, n);
-  const D = zeroVector(n);
-  for (let j = 0; j < n; j++) {
-    let s = 0;
-    for (let k = 0; k < j; k++) {
-      s += L[j][k] * L[j][k] * D[k];
-    }
-    D[j] = A[j][j] - s;
-    for (let i = j + 1; i < n; i++) {
-      let t = 0;
-      for (let k = 0; k < j; k++) {
-        t += L[i][k] * L[j][k] * D[k];
-      }
-      L[i][j] = (A[i][j] - t) / D[j];
-    }
-  }
-  const p = new Array(n);
-  return [L, D];
-}
-
 function symmetricIndefiniteFactorization(A) {
   const n = A.length;
   const L = zeroMatrix(n, n);
@@ -384,7 +370,7 @@ function solveUsingFactorization(L, D, b) {
 
 function solveSymmetricIndefinite(A, b) {
   [L, D] = symmetricIndefiniteFactorization(A);
-  return solveSymmetricIndefiniteUsingFactorization(L, D, b);
+  return solveUsingFactorization(L, D, b);
 }
 
 // Parsing of objectives and constraints
