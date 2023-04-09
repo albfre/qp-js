@@ -1,4 +1,4 @@
-function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
+function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=30) {
   /* minimize 0.5 x' H x + c' x
    *   st    Aeq x = beq
    *         Aineq x >= bineq
@@ -34,8 +34,6 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     const Hx = matrixTimesVector(H, x);
     const Aeqx = matrixTimesVector(Aeq, x);
     const Aineqx = matrixTimesVector(Aineq, x);
-    const AeqTy = matrixTimesVector(AeqT, y);
-    const AineqTz = matrixTimesVector(AineqT, z);
 
     // Objective
     const f = 0.5 * dot(x, Hx) + dot(c, x); // 0.5 x' H x + c' x
@@ -43,9 +41,11 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
     // Residuals
     let rGrad = add(Hx, c); // Hx + c + Aeq' y - Aineq' z
     if (mEq > 0 ) {
+      const AeqTy = matrixTimesVector(AeqT, y);
       rGrad = add(rGrad, AeqTy);
     }
     if (mIneq > 0 ) {
+      const AineqTz = matrixTimesVector(AineqT, z);
       rGrad = subtract(rGrad, AineqTz);
     }
     const rEq = subtract(Aeqx, beq); // Aeq x - beq
@@ -80,6 +80,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
     // Solve the KKT system
     const d = solveUsingFactorization(L, D, rhs);
+    console.log('d: ' + d);
 
     // Extract the search direction components
     const dx = d.slice(0, n);
@@ -118,42 +119,53 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
 
     // Check the convergence criterion
     const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
-    console.log('f: ' + f + ', res: ' + res + ', gap: ' + gap )
+    console.log(`${iter}. f: ${f}, res: ${res}, gap: ${gap}`)
+    console.log('rGrad: ' + rGrad)
+    console.log('rEq: ' + rEq)
+    console.log('rIneq: ' + rIneq)
+    console.log('rS: ' + rS)
     if (res <= tol && gap <= tol) {
       break;
     }
 
     // Update and factorize KKT matrix
     updateMatrix(s, z);
-    [L, D] = symmetricIndefiniteFactorization(KKT);
+    const [L, D] = symmetricIndefiniteFactorization(KKT);
+    console.log(L)
 
     // Use the predictor-corrector method
 
     // Compute affine scaling step
     const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rS);
+    console.log('dzAff: ' + dzAff);
+    console.log('dsAff: ' + dsAff);
     const alphaAffP = getMaxStep(s, dsAff);
     const alphaAffD = getMaxStep(z, dzAff);
+    const alphaAff = Math.min(alphaAffP, alphaAffD);
     const zAff = Array.from(z);
     const sAff = Array.from(s);
-    vectorPlusEqScalarTimesVector(sAff, alphaAffP, dsAff);
-    vectorPlusEqScalarTimesVector(zAff, alphaAffD, dzAff);
+    vectorPlusEqScalarTimesVector(sAff, alphaAff, dsAff);
+    vectorPlusEqScalarTimesVector(zAff, alphaAff, dzAff);
     const muAff = getMu(zAff, sAff);
 
     // Compute aggregated centering-corrector direction
     const mu = getMu(s, z);
-    const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
+    let sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
     const { rS : rSCenter } = evalFunc(x, s, y, z, sigma * mu);
     const rSCenterCorr = add(elementwiseVectorProduct(dzAff, dsAff), rS);
     const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rSCenterCorr);
     const alphaP = getMaxStep(s, ds);
     const alphaD = getMaxStep(z, dz);
+    const alpha = Math.min(alphaP, alphaD);
 
     // Update the variables
     const fractionToBoundary = 0.995;
-    vectorPlusEqScalarTimesVector(x, fractionToBoundary * alphaP, dx);
-    vectorPlusEqScalarTimesVector(s, fractionToBoundary * alphaP, ds);
-    vectorPlusEqScalarTimesVector(y, fractionToBoundary * alphaD, dy);
-    vectorPlusEqScalarTimesVector(z, fractionToBoundary * alphaD, dz);
+    vectorPlusEqScalarTimesVector(x, fractionToBoundary * alpha, dx);
+    vectorPlusEqScalarTimesVector(s, fractionToBoundary * alpha, ds);
+    vectorPlusEqScalarTimesVector(y, fractionToBoundary * alpha, dy);
+    vectorPlusEqScalarTimesVector(z, fractionToBoundary * alpha, dz);
+    console.log('alphaAff: ' + alphaAff + ', alpha: ' + alpha * fractionToBoundary)
+
   }
 
   // Return the solution and objective value
@@ -162,6 +174,52 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=500) {
   return { x, f, res, gap, iter };
 }
 
+function addMatrices(a, b) {
+  const aNumRows = a.length;
+  const aNumCols = a[0].length;
+  const bNumCols = b[0].length;
+  const result = new Array(aNumRows);
+
+  for (let r = 0; r < aNumRows; r++) {
+    result[r] = new Array(bNumCols);
+    for (let c = 0; c < aNumCols; c++) {
+      result[r][c] = a[r][c] + b[r][c];
+    }
+  }
+
+  return result;
+}
+
+function multiplyMatrices(a, b) {
+  const aNumRows = a.length;
+  const aNumCols = a[0].length;
+  const bNumCols = b[0].length;
+  const result = new Array(aNumRows);
+
+  for (let r = 0; r < aNumRows; r++) {
+    result[r] = new Array(bNumCols);
+    for (let c = 0; c < bNumCols; c++) {
+      result[r][c] = 0;
+      for (let i = 0; i < aNumCols; i++) {
+        result[r][c] += a[r][i] * b[i][c];
+      }
+    }
+  }
+
+  return result;
+}
+
+function multiplyWithFactorization(L, D, P, b) {
+  const pinv = inversePermutation(P);
+  const bp = permuteVector(b, pinv);
+
+  // P L D L' P' b
+  const i = diag(filledVector(L.length, 1));
+  const LD = addMatrices(L, i);
+  const LDL = multiplyMatrices(multiplyMatrices(LD, diag(D)), transpose(LD))
+  const r = matrixTimesVector(LDL, bp);
+  return permuteVector(r, P);
+}
 
 // Helper functions for linear algebra operations
 function filledVector(n, v) {
@@ -208,7 +266,7 @@ function setSubdiagonal(M, d, startI, startJ) {
 }
 
 function isVector(x) {
-  return Array.isArray(x) && x.every(xi => typeof xi == 'number');
+  return Array.isArray(x) && x.every(xi => typeof xi === 'number');
 }
 
 function assertIsVector(x, name) {
@@ -310,10 +368,144 @@ function dot(x, y) {
   return x.reduce((sum, value, index) => sum + value * y[index], 0);
 }
 
+function symmetricIndefiniteFactorization2(Ain) {
+  const A = Ain.map(row => [...row]);
+  const n = A.length;
+  const alpha = (1.0 + Math.sqrt(17)) / 8;
+  const ipiv = zeroVector(n);
+
+  let info = 0;
+
+  let k = 0; // K is the main loop index, increasing from 1 to N in steps of 1 or 2
+  while (k < n) {
+    let kstep = 1
+    let kp = 0;
+    const absakk = Math.abs(A[k][k]);
+    // IMAX is the row-index of the largest off-diagonal element in column K, and COLMAX is its absolute value
+    let imax = 0;
+    let colmax = 0.0;
+    for (let i = k + 1; i < n; i++) {
+      const v = Math.abs(A[i][k]);
+      if (v > colmax) {
+        colmax = v;
+        imax = i;
+      }
+    }
+    if (absakk === 0.0 && colmax === 0.0) {
+      // Column K is zero: set INFO and continue
+      if (info === 0) {
+        info = k;
+        kp = k;
+      }
+    }
+    else {
+      if (absakk >= alpha * colmax) {
+        // no interchange, use 1-by-1 pivot block
+        kp = k;
+      }
+      else {
+        // JMAX is the column-index of the largest off-diagonal element in row IMAX, and ROWMAX is its absolute value
+        let rowmax = 0.0;
+        let jmax = 0;
+        for (let j = k; j < n; j++) {
+          if (j != imax) {
+            const v = Math.abs(A[imax][j]);
+            if (v > rowmax) {
+              rowmax = v;
+              jmax = j;
+            }
+          }
+        }
+        if (absakk * rowmax >= alpha * colmax * colmax) {
+          // no interchange, use 1-by-1 pivot block
+          kp = k
+        }
+        else if (Math.abs(A[imax][imax]) >= alpha * rowmax) {
+          // interchange rows and columns K and IMAX, use 1-by-1 pivot block
+          kp = imax;
+        }
+        else {
+          // interchange rows and columns K+1 and IMAX, use 2-by-2 pivot block
+          kp = imax;
+          kstep = 2;
+        }
+      }
+      const kk = k + kstep - 1;
+      if (kp !== kk) {
+        // Interchange rows and columns KK and KP in the trailing submatrix A(k:n,k:n)
+        for (let i = k; i < n; i++) {
+          [A[i][kp], A[i][kk]] = [A[i][kk], A[i][kp]];
+        }
+        for (let j = k; j < n; j++) {
+          [A[kp][j], A[kk][j]] = [A[kk][j], A[kp][j]];
+        }
+      }
+      // Update the trailing submatrix
+      if (kstep === 1) {
+        // 1-by-1 pivot block D(k): column k now holds W(k) = L(k)*D(k) where L(k) is the k-th column of L
+        // Perform a rank-1 update of A(k+1:n,k+1:n) as A := A - L(k)*D(k)*L(k)**T = A - W(k)*(1/D(k))*W(k)**T
+        const r1 = 1.0 / A[k][k];
+        const row = A[k];
+        for (let i = k + 1; i < n; i++) {
+          for (let j = i; j < n; j++) {
+            A[i][j] -= r1 * row[i] * row[j]
+            A[j][i] = A[i][j];
+          }
+        }
+
+        for (let i = k + 1; i < n; i++) {
+          A[k][i] *= r1;
+          A[i][k] *= r1;
+        }
+      }
+      else {
+        // 2-by-2 pivot block D(k): columns K and K+1 now hold ( W(k) W(k+1) ) = ( L(k) L(k+1) )*D(k)
+        // where L(k) and L(k+1) are the k-th and (k+1)-th columns of L
+        if (k < n - 1) {
+          // Perform a rank-2 update of A(k+2:n,k+2:n) as
+          // A := A - ( L(k) L(k+1) )*D(k)*( L(k) L(k+1) )**T = A - ( W(k) W(k+1) )*inv(D(k))*( W(k) W(k+1) )**T
+          // where L(k) and L(k+1) are the k-th and (k+1)-th columns of L
+
+          let d21 = A[k + 1][k];
+          const d11 = A[k + 1][k + 1] / d21;
+          const d22 = A[k][k] / d21;
+          const t = 1.0 / (d11 * d22 - 1.0);
+          d21 = t / d21;
+
+          for (let j = k + 2; j < n; j++) {
+            const wk = d21 * (d11 * A[j][k] - A[j][k + 1]);
+            const wkp1 = d21 * (d22 * A[j][k + 1] - A[j][k]);
+            for (let i = j; i < n; i++) {
+              A[i][j] -= (A[i][k] * wk + A[i][k + 1] * wkp1);
+              A[j][i] = A[i][j];
+            }
+            A[j][k] = wk;
+            A[j][k + 1] = wkp1;
+            A[k][j] = wk;
+            A[k + 1][j] = wkp1;
+          }
+        }
+      }
+    }
+    // Store details of the interchanges in IPIV
+    if (kstep === 1) {
+      ipiv[k] = kp;
+    }
+    else {
+      ipiv[k] = -kp;
+      ipiv[k + 1] = -kp;
+    }
+    k += kstep;
+  }
+
+  return [A, ipiv];
+}
+
 function symmetricIndefiniteFactorization(A) {
   const n = A.length;
   const L = zeroMatrix(n, n);
   const D = zeroVector(n);
+  const P = zeroVector(n).map((_, i) => i);
 
   for (let i = 0; i < n; i++) {
     // Compute the (i,i) entry of D
@@ -339,13 +531,17 @@ function symmetricIndefiniteFactorization(A) {
     }
   }
 
-  return [L, D];
+  return [L, D, P ];
+}
+
+function zeroVector(n) {
+  return new Array(n).fill(0);
 }
 
 function solveUsingFactorization(L, D, b) {
   const n = L.length;
-  const x = new Array(n).fill(0);
-  const y = new Array(n).fill(0);
+  const x = zeroVector(n);
+  const y = zeroVector(n);
 
   // Forward substitution: solve Ly = b
   for (let i = 0; i < n; i++) {
@@ -472,7 +668,7 @@ function parseConstraints(variables, constraints) {
   let eqs = [];
   for (const constraint of constraints) {
     const { coefficients, separator, rhs } = parseConstraint(constraint);
-    if (separator == '=') {
+    if (separator === '=') {
       eqs.push({ coefficients, separator, rhs });
     }
     else {
@@ -485,7 +681,7 @@ function parseConstraints(variables, constraints) {
     const b = zeroVector(cs.length);
     for (let i = 0; i < cs.length; i++) {
       const c = cs[i];
-      const sign = c.separator == '<=' ? -1 : 1;
+      const sign = c.separator === '<=' ? -1 : 1;
       const constraintVariables = Object.keys(c.coefficients);
       validateVariables(variables, constraintVariables);
       for (const v in c.coefficients) {
@@ -521,7 +717,7 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
     addRow('Gap', gap);
     addRow('Elapsed time', `${end - start} milliseconds`);
     for (let i = 0; i < x.length; i++) {
-      addRow(variables.length == x.length ? variables[i] : `x${i}`, x[i]);
+      addRow(variables.length === x.length ? variables[i] : `x${i}`, x[i]);
     }
     addRow('Variable vector', x);
     tableStr += '</table>';
@@ -547,27 +743,102 @@ function test() {
 }
 
 function solveTestProblem() {
-  let n = 100;
-  const Q = zeroMatrix(n, n);
-  const c = zeroVector(n);
-  const Aineq = zeroMatrix(n, n);
-  const bineq = zeroVector(n);
-  for (let i = 0; i < n; ++i) {
-    Q[i][n-i-1] = 1.2 + 0.1;
-    Q[n-i-1][i] = 1.2 + 0.1;
+  if (false) {
+    let n = 100;
+    const Q = zeroMatrix(n, n);
+    const c = zeroVector(n);
+    const Aineq = zeroMatrix(n, n);
+    const bineq = zeroVector(n);
+    for (let i = 0; i < n; ++i) {
+      Q[i][n-i-1] = 1.2 + 0.1;
+      Q[n-i-1][i] = 1.2 + 0.1;
 
-    Q[i][i] = i + 3;
-    c[i] = -0.5 * i;
-    Aineq[i][i] = 1; // x[i] >= i
-    bineq[i] = i * i * 0.01;
+      Q[i][i] = i + 3;
+      c[i] = -0.5 * i;
+      Aineq[i][i] = 1; // x[i] >= i
+      bineq[i] = i * i * 0.01;
+    }
+    let Aeq = zeroMatrix(0, 0);
+    let beq = zeroVector(0);
+    Aeq = zeroMatrix(1, n);
+    beq = zeroVector(1);
+    Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
+    Aeq[0][2] = -2;
+    solveQP(Q, c, Aeq, beq, Aineq, bineq);
   }
-  let Aeq = zeroMatrix(0, 0);
-  let beq = zeroVector(0);
-  Aeq = zeroMatrix(1, n);
-  beq = zeroVector(1);
-  Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
-  Aeq[0][2] = -2;
-  solveQP(Q, c, Aeq, beq, Aineq, bineq);
+  else {
+    let n = 2;
+    const Q = zeroMatrix(n, n);
+    const c = zeroVector(n);
+    let t0 = 1300;
+    let t1 = 50;
+    let a00 = 809;
+    let a01 = 359;
+    let a10 = 25;
+    let a11 = 77;
+
+
+    // e' x = 1
+    const Aeq = filledMatrix(1, n, 1.0);
+    const beq = filledVector(1, 1.0);
+
+    // x >= 0
+    const Aineq = diag(filledVector(n, 1.0));
+    const bineq = zeroVector(n);
+
+    let k = 0;
+    Q[0][0] = (a00**2) / t0**2 + k;
+    Q[1][1] = (a01**2) / t0**2 + k;
+    Q[0][1] = (a00 * a01) / t0**2;
+    Q[1][0] = (a00 * a01) / t0**2;
+    c[0] = -t0 * a00 / t0**2;
+    c[1] = -t0 * a01 / t0**2;
+    console.log(Q)
+
+    const mIneq = Aineq.length;
+    const mEq = Aeq.length;
+
+    const x = new Array(n).fill(1.0);        // Primal variables
+    const s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
+    const y = new Array(mEq).fill(1.0);    // Multipliers for equality constraints
+    const z = new Array(mIneq).fill(1.0); // Multipliers for inequality constraints
+
+  const AineqT = transpose(Aineq);
+  const AeqT = transpose(Aeq);
+
+    const m = n + mEq + mIneq;
+    const KKT = zeroMatrix(m, m);
+    setSubmatrix(KKT, Q, 0, 0);
+    setSubmatrix(KKT, AeqT, 0, n);
+    setSubmatrix(KKT, AineqT, 0, n + mEq);
+    setSubmatrix(KKT, Aeq, n, 0);
+    setSubmatrix(KKT, Aineq, n + mEq, 0);
+    const minusZinvS = negate(elementwiseVectorDivision(s, z));
+    setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
+
+    console.log('kkt')
+    console.log(KKT)
+
+    const [L, D] = symmetricIndefiniteFactorization(KKT);
+    console.log('L');
+
+
+    v = [1,2, 3, 4, 5];
+    const r1 = multiplyWithFactorization(L, D, P, v);
+    const r2 = matrixTimesVector(KKT, v);
+    console.log('r1: ' + r1);
+    console.log('r2: ' + r2);
+
+    console.log(L)
+    console.log(D)
+
+
+    const [L2, P2] = symmetricIndefiniteFactorization2(KKT);
+    console.log('new:');
+    console.log(L2);
+    console.log(P2);
+    //solveQP(Q, c, Aeq, beq, Aineq, bineq);
+  }
 }
 
 // Functions relating to buttons on the html page
