@@ -209,6 +209,7 @@ function multiplyMatrices(a, b) {
   return result;
 }
 
+/*
 function multiplyWithFactorization(L, D, P, b) {
   const pinv = inversePermutation(P);
   const bp = permuteVector(b, pinv);
@@ -220,6 +221,7 @@ function multiplyWithFactorization(L, D, P, b) {
   const r = matrixTimesVector(LDL, bp);
   return permuteVector(r, P);
 }
+*/
 
 // Helper functions for linear algebra operations
 function filledVector(n, v) {
@@ -376,12 +378,12 @@ function symmetricIndefiniteFactorization2(Ain) {
 
   let info = 0;
 
-  let k = 0; // K is the main loop index, increasing from 1 to N in steps of 1 or 2
+  let k = 0; // k is the main loop index, increasing from 1 to n in steps of 1 or 2
   while (k < n) {
     let kstep = 1
     let kp = 0;
     const absakk = Math.abs(A[k][k]);
-    // IMAX is the row-index of the largest off-diagonal element in column K, and COLMAX is its absolute value
+    // imax is the row-index of the largest off-diagonal element in column k, and colmax is its absolute value
     let imax = 0;
     let colmax = 0.0;
     for (let i = k + 1; i < n; i++) {
@@ -392,7 +394,7 @@ function symmetricIndefiniteFactorization2(Ain) {
       }
     }
     if (absakk === 0.0 && colmax === 0.0) {
-      // Column K is zero: set INFO and continue
+      // Column k is zero: set info and continue
       if (info === 0) {
         info = k;
         kp = k;
@@ -404,7 +406,7 @@ function symmetricIndefiniteFactorization2(Ain) {
         kp = k;
       }
       else {
-        // JMAX is the column-index of the largest off-diagonal element in row IMAX, and ROWMAX is its absolute value
+        // jmax is the column-index of the largest off-diagonal element in row imax, and rowmax is its absolute value
         let rowmax = 0.0;
         let jmax = 0;
         for (let j = k; j < n; j++) {
@@ -421,18 +423,18 @@ function symmetricIndefiniteFactorization2(Ain) {
           kp = k
         }
         else if (Math.abs(A[imax][imax]) >= alpha * rowmax) {
-          // interchange rows and columns K and IMAX, use 1-by-1 pivot block
+          // interchange rows and columns k and imax, use 1-by-1 pivot block
           kp = imax;
         }
         else {
-          // interchange rows and columns K+1 and IMAX, use 2-by-2 pivot block
+          // interchange rows and columns k+1 and imax, use 2-by-2 pivot block
           kp = imax;
           kstep = 2;
         }
       }
       const kk = k + kstep - 1;
       if (kp !== kk) {
-        // Interchange rows and columns KK and KP in the trailing submatrix A(k:n,k:n)
+        // Interchange rows and columns kk and kp in the trailing submatrix A(k:n,k:n)
         for (let i = k; i < n; i++) {
           [A[i][kp], A[i][kk]] = [A[i][kk], A[i][kp]];
         }
@@ -459,7 +461,7 @@ function symmetricIndefiniteFactorization2(Ain) {
         }
       }
       else {
-        // 2-by-2 pivot block D(k): columns K and K+1 now hold ( W(k) W(k+1) ) = ( L(k) L(k+1) )*D(k)
+        // 2-by-2 pivot block D(k): columns k and k+1 now hold ( W(k) W(k+1) ) = ( L(k) L(k+1) )*D(k)
         // where L(k) and L(k+1) are the k-th and (k+1)-th columns of L
         if (k < n - 1) {
           // Perform a rank-2 update of A(k+2:n,k+2:n) as
@@ -487,7 +489,7 @@ function symmetricIndefiniteFactorization2(Ain) {
         }
       }
     }
-    // Store details of the interchanges in IPIV
+    // Store details of the interchanges in ipiv
     if (kstep === 1) {
       ipiv[k] = kp;
     }
@@ -499,6 +501,122 @@ function symmetricIndefiniteFactorization2(Ain) {
   }
 
   return [A, ipiv];
+}
+
+function solveUsingFactorization2(L, ipiv, bin) {
+  // Solve A*X = B, where A = L*D*L**T.
+
+  const b = [...bin];
+  assertIsMatrix(L);
+  L.every(row => assertAreEqualLengthVectors(row, b));
+  assertAreEqualLengthVectors(ipiv, b);
+  const n = b.length;
+
+  // First solve L*D*X = B, overwriting B with X.
+  // k is the main loop index, increasing from 1 to n in steps of 1 or 2, depending on the size of the diagonal blocks.
+  let k = 0;
+  while (k < n) {
+    if (ipiv[k] >= 0) {
+      // 1 x 1 diagonal block, interchange rows k and ipiv(k).
+      const kp = ipiv[k];
+      if (kp != k) {
+        [b[k], b[kp]] = [b[kp], b[k]];
+      }
+      // Multiply by inv(L(k)), where L(k) is the transformation stored in column k of L.
+
+      // Subroutine dger
+      const temp = -b[k];
+      for (let i = k + 1; i < n; i++) {
+        b[i] += L[i][k] * temp;
+      }
+      
+      b[k] /= L[k][k];
+      k += 1;
+    }
+    else {
+      // 2 x 2 diagonal block, interchange rows k+1 and -ipiv(k).
+
+      const kp = -ipiv[k];
+      if (kp !== k + 1) {
+        [b[k + 1], b[kp]] = [b[kp], b[k + 1]];
+      }
+      // Multiply by inv(L(k)), where L(k) is the transformation stored in columns k and k+1 of L.
+      if (k < n - 1) {
+        // Subroutine dger
+        const temp = -b[k];
+        for (let i = k + 2; i < n; i++) {
+          b[i] += L[i][k] * temp;
+        }
+
+        // Subroutine dger
+        const temp2 = -b[k + 1];
+        for (let i = k + 2; i < n; i++) {
+          b[i] += L[i][k + 1] * temp2;
+        }
+      }
+      // Multiply by the inverse of the diagonal block.
+      const akm1k = L[k + 1][k];
+      const akm1 = L[k][k] / akm1k;
+      const ak = L[k + 1][k + 1] / akm1k;
+      const denom = akm1 * ak - 1.0;
+      const bkm1 = b[k] / akm1k;
+      const bk = b[k + 1] / akm1k;
+      b[k] = (ak * bkm1 - bk) / denom;
+      b[k + 1] = (akm1 * bk - bkm1) / denom;
+      k = k + 2
+    }
+  }
+
+  // Next solve L**T *X = B, overwriting B with X.
+  // k is the main loop index, decreasing from n - 1 to 0 in steps of 1 or 2, depending on the size of the diagonal blocks.
+  k = n - 1;
+  while (k >= 0) {
+    if (ipiv[k] >= 0) {
+      // 1 x 1 diagonal block, multiply by inv(L**T(k)), where L(k) is the transformation stored in column k of L.
+
+      if (k < n - 1) {
+        // Subroutine dgemv 'Transpose' with alpha = -1 and beta = 1
+        let temp = 0.0;
+        for (let i = k + 1; i < n; ++i) {
+          temp += L[i][k] * b[i];
+        }
+        b[k] -= temp;
+      }
+      // Interchange rows K and IPIV(K).
+      const kp = ipiv[k];
+      if (kp !== k) {
+        [b[k], b[kp]] = [b[kp], b[k]];
+      }
+
+      k -= 1;
+    }
+    else {
+      // 2 x 2 diagonal block, multiply by inv(L**T(k-1)), where L(k-1) is the transformation stored in columns k-1 and k of L.
+
+      if (k < n - 1) {
+        // Subroutine dgemv 'Transpose' with alpha = -1 and beta = 1
+        let temp = 0.0;
+        for (let i = k + 1; i < n; ++i) {
+          temp += L[i][k] * b[i];
+        }
+        b[k] -= temp;
+
+        let temp2 = 0.0;
+        for (let i = k + 1; i < n; ++i) {
+          temp2 += L[i][k - 1] * b[i];
+        }
+        b[k - 1] -= temp2;
+      }
+
+      // Interchange rows k and -ipiv(k).
+      const kp = -ipiv[k];
+      if (kp !== k) {
+        [b[k], b[kp]] = [b[kp], b[k]];
+      }
+      k -= 2;
+    }
+  }
+  return b;
 }
 
 function symmetricIndefiniteFactorization(A) {
@@ -532,10 +650,6 @@ function symmetricIndefiniteFactorization(A) {
   }
 
   return [L, D, P ];
-}
-
-function zeroVector(n) {
-  return new Array(n).fill(0);
 }
 
 function solveUsingFactorization(L, D, b) {
@@ -824,9 +938,10 @@ function solveTestProblem() {
 
 
     v = [1,2, 3, 4, 5];
-    const r1 = multiplyWithFactorization(L, D, P, v);
-    const r2 = matrixTimesVector(KKT, v);
-    console.log('r1: ' + r1);
+    //const r1 = multiplyWithFactorization(L, D, v);
+    //const r2 = matrixTimesVector(KKT, v);
+    //console.log('r1: ' + r1);
+    const r2 = solveUsingFactorization(L, D, v);
     console.log('r2: ' + r2);
 
     console.log(L)
@@ -837,6 +952,8 @@ function solveTestProblem() {
     console.log('new:');
     console.log(L2);
     console.log(P2);
+    const b = solveUsingFactorization2(L2, P2, v);
+    console.log(b);
     //solveQP(Q, c, Aeq, beq, Aineq, bineq);
   }
 }
