@@ -24,19 +24,22 @@
           <td>subject to</td>
           <td>
             <input type="text" id="constraint" size="30" value="x <= 1">
-            <button type="button" id="add-constraint">Add constraint</button>
+            <button type="button" id="add-constraint-button">Add constraint</button>
             (linear constraint on the form "-x + 2z = 4", supporting "=", "<=" and ">=")
           </td>
         </tr>
       </table>
     </p>
 
-    <button type="button" id="clear">Clear</button>
-    <button type="button" id="solve">Solve</button>
-    <button type="button" id="test">Test</button>
+    <button type="button" id="clear-button">Clear</button>
+    <button type="button" id="solve-button">Solve</button>
+    <button type="button" id="test-button">Test</button>
   </form>
   <h2>Solution</h2>
   <p id="solution"></p>
+  <script src="bunch-kaufman.js"></script>
   <script src="qp.js"></script>
+  <script src="presentation.js"></script>
+  <script src="test-problem.js"></script>
 </body>
 </html>
