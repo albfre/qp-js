@@ -95,10 +95,10 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
   }
 
   // Initialize primal and dual variables
-  const x = new Array(n).fill(1.0);        // Primal variables
-  const s = new Array(mIneq).fill(1.0);    // Slack variables for inequality constraints
-  const y = new Array(mEq).fill(1.0);    // Multipliers for equality constraints
-  const z = new Array(mIneq).fill(1.0); // Multipliers for inequality constraints
+  const x = filledVector(n, 1.0);     // Primal variables
+  const s = filledVector(mIneq, 1.0;  // Slack variables for inequality constraints
+  const y = filledVector(mEq, 1.0);   // Multipliers for equality constraints
+  const z = filledVector(mIneq, 1.0); // Multipliers for inequality constraints
   
   function getMu(s, z) {
     return mIneq > 0 ? dot(s, z) / mIneq : 0;
