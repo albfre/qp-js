@@ -1,4 +1,4 @@
-function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=30) {
+function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
   /* minimize 0.5 x' H x + c' x
    *   st    Aeq x = beq
    *         Aineq x >= bineq
@@ -50,7 +50,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=30) {
     }
     const rEq = subtract(Aeqx, beq); // Aeq x - beq
     const rIneq = subtract(subtract(Aineqx, s), bineq); // Aineq x - s - bineq
-    const rS = subtract(elementwiseVectorProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
+    const rS = subtract(elementwiseProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
 
     return { f, rGrad, rEq, rIneq, rS };
   }
@@ -69,24 +69,23 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=30) {
   setSubmatrix(KKT, Aeq, n, 0);
   setSubmatrix(KKT, Aineq, n + mEq, 0);
   function updateMatrix(s, z) {
-    const minusZinvS = negate(elementwiseVectorDivision(s, z));
+    const minusZinvS = negate(elementwiseDivision(s, z));
     setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
   }
 
   // Define the function for computing the search direction
-  function computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rS) {
-    const rIneqMinusYinvrS = add(rIneq, elementwiseVectorDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
+  function computeSearchDirection(s, z, L, ipiv, rGrad, rEq, rIneq, rS) {
+    const rIneqMinusYinvrS = add(rIneq, elementwiseDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
     const rhs = negate(rGrad.concat(rEq).concat(rIneqMinusYinvrS));
 
     // Solve the KKT system
-    const d = solveUsingFactorization(L, D, rhs);
-    console.log('d: ' + d);
+    const d = solveUsingFactorization(L, ipiv, rhs);
 
     // Extract the search direction components
     const dx = d.slice(0, n);
     const dy = d.slice(n, n + mEq);
     const dz = negate(d.slice(n + mEq, n + mEq + mIneq));
-    const ds = negate(elementwiseVectorDivision(add(rS, elementwiseVectorProduct(s, dz)), z)); // -Z^-1 (rS + S dz)
+    const ds = negate(elementwiseDivision(add(rS, elementwiseProduct(s, dz)), z)); // -Z^-1 (rS + S dz)
 
     return { dx, ds, dy, dz };
   }
@@ -120,52 +119,41 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=30) {
     // Check the convergence criterion
     const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
     console.log(`${iter}. f: ${f}, res: ${res}, gap: ${gap}`)
-    console.log('rGrad: ' + rGrad)
-    console.log('rEq: ' + rEq)
-    console.log('rIneq: ' + rIneq)
-    console.log('rS: ' + rS)
     if (res <= tol && gap <= tol) {
       break;
     }
 
     // Update and factorize KKT matrix
     updateMatrix(s, z);
-    const [L, D] = symmetricIndefiniteFactorization(KKT);
-    console.log(L)
+    const [L, ipiv] = symmetricIndefiniteFactorization(KKT);
 
     // Use the predictor-corrector method
 
     // Compute affine scaling step
-    const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rS);
-    console.log('dzAff: ' + dzAff);
-    console.log('dsAff: ' + dsAff);
+    const { dx : dxAff, ds : dsAff, dy : dyAff, dz : dzAff } = computeSearchDirection(s, z, L, ipiv, rGrad, rEq, rIneq, rS);
     const alphaAffP = getMaxStep(s, dsAff);
     const alphaAffD = getMaxStep(z, dzAff);
-    const alphaAff = Math.min(alphaAffP, alphaAffD);
     const zAff = Array.from(z);
     const sAff = Array.from(s);
-    vectorPlusEqScalarTimesVector(sAff, alphaAff, dsAff);
-    vectorPlusEqScalarTimesVector(zAff, alphaAff, dzAff);
+    vectorPlusEqScalarTimesVector(sAff, alphaAffP, dsAff);
+    vectorPlusEqScalarTimesVector(zAff, alphaAffD, dzAff);
     const muAff = getMu(zAff, sAff);
 
     // Compute aggregated centering-corrector direction
     const mu = getMu(s, z);
-    let sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
+    const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
     const { rS : rSCenter } = evalFunc(x, s, y, z, sigma * mu);
-    const rSCenterCorr = add(elementwiseVectorProduct(dzAff, dsAff), rS);
-    const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, D, rGrad, rEq, rIneq, rSCenterCorr);
+    const rSCenterCorr = add(elementwiseProduct(dzAff, dsAff), rS);
+    const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, ipiv, rGrad, rEq, rIneq, rSCenterCorr);
     const alphaP = getMaxStep(s, ds);
     const alphaD = getMaxStep(z, dz);
-    const alpha = Math.min(alphaP, alphaD);
 
     // Update the variables
     const fractionToBoundary = 0.995;
-    vectorPlusEqScalarTimesVector(x, fractionToBoundary * alpha, dx);
-    vectorPlusEqScalarTimesVector(s, fractionToBoundary * alpha, ds);
-    vectorPlusEqScalarTimesVector(y, fractionToBoundary * alpha, dy);
-    vectorPlusEqScalarTimesVector(z, fractionToBoundary * alpha, dz);
-    console.log('alphaAff: ' + alphaAff + ', alpha: ' + alpha * fractionToBoundary)
-
+    vectorPlusEqScalarTimesVector(x, fractionToBoundary * alphaP, dx);
+    vectorPlusEqScalarTimesVector(s, fractionToBoundary * alphaP, ds);
+    vectorPlusEqScalarTimesVector(y, fractionToBoundary * alphaD, dy);
+    vectorPlusEqScalarTimesVector(z, fractionToBoundary * alphaD, dz);
   }
 
   // Return the solution and objective value
@@ -173,55 +161,6 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=30) {
   const { res, gap } = getResidualAndGap(s, z, rGrad, rEq, rIneq);
   return { x, f, res, gap, iter };
 }
-
-function addMatrices(a, b) {
-  const aNumRows = a.length;
-  const aNumCols = a[0].length;
-  const bNumCols = b[0].length;
-  const result = new Array(aNumRows);
-
-  for (let r = 0; r < aNumRows; r++) {
-    result[r] = new Array(bNumCols);
-    for (let c = 0; c < aNumCols; c++) {
-      result[r][c] = a[r][c] + b[r][c];
-    }
-  }
-
-  return result;
-}
-
-function multiplyMatrices(a, b) {
-  const aNumRows = a.length;
-  const aNumCols = a[0].length;
-  const bNumCols = b[0].length;
-  const result = new Array(aNumRows);
-
-  for (let r = 0; r < aNumRows; r++) {
-    result[r] = new Array(bNumCols);
-    for (let c = 0; c < bNumCols; c++) {
-      result[r][c] = 0;
-      for (let i = 0; i < aNumCols; i++) {
-        result[r][c] += a[r][i] * b[i][c];
-      }
-    }
-  }
-
-  return result;
-}
-
-/*
-function multiplyWithFactorization(L, D, P, b) {
-  const pinv = inversePermutation(P);
-  const bp = permuteVector(b, pinv);
-
-  // P L D L' P' b
-  const i = diag(filledVector(L.length, 1));
-  const LD = addMatrices(L, i);
-  const LDL = multiplyMatrices(multiplyMatrices(LD, diag(D)), transpose(LD))
-  const r = matrixTimesVector(LDL, bp);
-  return permuteVector(r, P);
-}
-*/
 
 // Helper functions for linear algebra operations
 function filledVector(n, v) {
@@ -320,12 +259,12 @@ function negate(x) {
   return x.map(value => -value);
 }
 
-function elementwiseVectorProduct(x, y) {
+function elementwiseProduct(x, y) {
   assertAreEqualLengthVectors(x, y);
   return x.map((value, index) => value * y[index]);
 }
 
-function elementwiseVectorDivision(x, y) {
+function elementwiseDivision(x, y) {
   assertAreEqualLengthVectors(x, y);
   return x.map((value, index) => value / y[index]);
 }
@@ -370,7 +309,8 @@ function dot(x, y) {
   return x.reduce((sum, value, index) => sum + value * y[index], 0);
 }
 
-function symmetricIndefiniteFactorization2(Ain) {
+function symmetricIndefiniteFactorization(Ain) {
+  // Bunch-Kaufman factorization
   const A = Ain.map(row => [...row]);
   const n = A.length;
   const alpha = (1.0 + Math.sqrt(17)) / 8;
@@ -503,7 +443,7 @@ function symmetricIndefiniteFactorization2(Ain) {
   return [A, ipiv];
 }
 
-function solveUsingFactorization2(L, ipiv, bin) {
+function solveUsingFactorization(L, ipiv, bin) {
   // Solve A*X = B, where A = L*D*L**T.
 
   const b = [...bin];
@@ -619,7 +559,7 @@ function solveUsingFactorization2(L, ipiv, bin) {
   return b;
 }
 
-function symmetricIndefiniteFactorization(A) {
+function symmetricIndefiniteFactorization_unstable(A) {
   const n = A.length;
   const L = zeroMatrix(n, n);
   const D = zeroVector(n);
@@ -652,7 +592,7 @@ function symmetricIndefiniteFactorization(A) {
   return [L, D, P ];
 }
 
-function solveUsingFactorization(L, D, b) {
+function solveUsingFactorization_unstable(L, D, b) {
   const n = L.length;
   const x = zeroVector(n);
   const y = zeroVector(n);
@@ -676,11 +616,6 @@ function solveUsingFactorization(L, D, b) {
   }
 
   return x;
-}
-
-function solveSymmetricIndefinite(A, b) {
-  [L, D] = symmetricIndefiniteFactorization(A);
-  return solveUsingFactorization(L, D, b);
 }
 
 // Parsing of objectives and constraints
@@ -917,8 +852,8 @@ function solveTestProblem() {
     const y = new Array(mEq).fill(1.0);    // Multipliers for equality constraints
     const z = new Array(mIneq).fill(1.0); // Multipliers for inequality constraints
 
-  const AineqT = transpose(Aineq);
-  const AeqT = transpose(Aeq);
+    const AineqT = transpose(Aineq);
+    const AeqT = transpose(Aeq);
 
     const m = n + mEq + mIneq;
     const KKT = zeroMatrix(m, m);
@@ -927,34 +862,34 @@ function solveTestProblem() {
     setSubmatrix(KKT, AineqT, 0, n + mEq);
     setSubmatrix(KKT, Aeq, n, 0);
     setSubmatrix(KKT, Aineq, n + mEq, 0);
-    const minusZinvS = negate(elementwiseVectorDivision(s, z));
+    const minusZinvS = negate(elementwiseDivision(s, z));
     setSubdiagonal(KKT, minusZinvS, n + mEq, n + mEq);
 
     console.log('kkt')
     console.log(KKT)
 
-    const [L, D] = symmetricIndefiniteFactorization(KKT);
-    console.log('L');
-
-
     v = [1,2, 3, 4, 5];
-    //const r1 = multiplyWithFactorization(L, D, v);
-    //const r2 = matrixTimesVector(KKT, v);
-    //console.log('r1: ' + r1);
-    const r2 = solveUsingFactorization(L, D, v);
-    console.log('r2: ' + r2);
 
-    console.log(L)
-    console.log(D)
+    {
+      console.log('old:');
+      const [L, D] = symmetricIndefiniteFactorization_unstable(KKT);
+      console.log(L)
+      console.log(D)
+      const b = solveUsingFactorization_unstable(L, D, v);
+      console.log('b: ' + b);
+    }
 
+    {
+      console.log('new:');
+      const [L, P] = symmetricIndefiniteFactorization(KKT);
+      console.log(L);
+      console.log(P);
+      const b = solveUsingFactorization(L, P, v);
+      console.log('b: ' + b);
+    }
 
-    const [L2, P2] = symmetricIndefiniteFactorization2(KKT);
-    console.log('new:');
-    console.log(L2);
-    console.log(P2);
-    const b = solveUsingFactorization2(L2, P2, v);
-    console.log(b);
-    //solveQP(Q, c, Aeq, beq, Aineq, bineq);
+    console.log('Solve QP');
+    solveQP(Q, c, Aeq, beq, Aineq, bineq);
   }
 }
 
