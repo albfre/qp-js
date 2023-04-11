@@ -77,7 +77,7 @@ function solveTestProblem() {
 
     v = [1,2, 3, 4, 5];
 
-    {
+    if (false) {
       console.log('old:');
       const [L, D] = symmetricIndefiniteFactorization_unstable(KKT);
       console.log(L)

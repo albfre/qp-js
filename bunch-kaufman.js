@@ -69,11 +69,18 @@ function symmetricIndefiniteFactorization(Ain) {
       const kk = k + kstep - 1;
       if (kp !== kk) {
         // Interchange rows and columns kk and kp in the trailing submatrix A(k:n,k:n)
-        for (let i = k; i < n; i++) {
+        for (let i = kp + 1; i < n; i++) {
           [A[i][kp], A[i][kk]] = [A[i][kk], A[i][kp]];
         }
-        for (let j = k; j < n; j++) {
-          [A[kp][j], A[kk][j]] = [A[kk][j], A[kp][j]];
+
+        for (let j = kk + 1; j < kp; j++) {
+          [A[kp][j], A[j][kk]] = [A[j][kk], A[kp][j]];
+        }
+
+        [A[kp][kp], A[kk][kk]] = [A[kk][kk], A[kp][kp]];
+
+        if (kstep === 2) {
+          [A[kk][k], A[kp][k]] = [A[kp][k], A[kk][k]];
         }
       }
       // Update the trailing submatrix
@@ -81,17 +88,15 @@ function symmetricIndefiniteFactorization(Ain) {
         // 1-by-1 pivot block D(k): column k now holds W(k) = L(k)*D(k) where L(k) is the k-th column of L
         // Perform a rank-1 update of A(k+1:n,k+1:n) as A := A - L(k)*D(k)*L(k)**T = A - W(k)*(1/D(k))*W(k)**T
         const r1 = 1.0 / A[k][k];
-        const row = A[k];
         for (let j = k + 1; j < n; j++) {
+          const r1ajk = r1 * A[j][k];
           for (let i = j; i < n; i++) {
-            A[i][j] -= r1 * row[i] * row[j]
-            A[j][i] = A[i][j];
+            A[i][j] -= r1ajk * A[i][k];
           }
         }
 
         for (let i = k + 1; i < n; i++) {
           A[i][k] *= r1;
-          A[k][i] = A[i][k];
         }
       }
       else {
@@ -113,12 +118,9 @@ function symmetricIndefiniteFactorization(Ain) {
             const wkp1 = d21 * (d22 * A[j][k + 1] - A[j][k]);
             for (let i = j; i < n; i++) {
               A[i][j] -= (A[i][k] * wk + A[i][k + 1] * wkp1);
-              A[j][i] = A[i][j];
             }
             A[j][k] = wk;
             A[j][k + 1] = wkp1;
-            A[k][j] = A[j][k];
-            A[k + 1][j] = A[j][k + 1];
           }
         }
       }
