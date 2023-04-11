@@ -147,15 +147,14 @@ function solveUsingFactorization(L, ipiv, bin) {
 
   // First solve L*D*X = B, overwriting B with X.
   // k is the main loop index, increasing from 1 to n in steps of 1 or 2, depending on the size of the diagonal blocks.
+  function dger(i_start, j_index) {
+    const temp = -b[j_index];
+    for (let i = i_start; i < n; i++) {
+      b[i] += L[i][j_index] * temp;
+    }
+  }
   let k = 0;
   while (k < n) {
-    function dger(i_start, j_index) {
-      const temp = -b[j_index];
-      for (let i = i_start; i < n; i++) {
-        b[i] += L[i][j_index] * temp;
-      }
-    }
-
     if (ipiv[k] >= 0) {
       // 1 x 1 diagonal block, interchange rows k and ipiv(k).
       const kp = ipiv[k];
@@ -194,20 +193,19 @@ function solveUsingFactorization(L, ipiv, bin) {
 
   // Next solve L**T *X = B, overwriting B with X.
   // k is the main loop index, decreasing from n - 1 to 0 in steps of 1 or 2, depending on the size of the diagonal blocks.
+  function dgemv(i_start, j_index) {
+    let temp = 0.0;
+    for (let i = i_start; i < n; ++i) {
+      temp += L[i][j_index] * b[i];
+    }
+    b[j_index] -= temp;
+  }
   k = n - 1;
   while (k >= 0) {
-    function dgemv(j_index) {
-      let temp = 0.0;
-      for (let i = k + 1; i < n; ++i) {
-        temp += L[i][j_index] * b[i];
-      }
-      b[j_index] -= temp;
-    }
-
     if (ipiv[k] >= 0) {
       // 1 x 1 diagonal block, multiply by inv(L**T(k)), where L(k) is the transformation stored in column k of L.
       if (k < n - 1) {
-        dgemv(k); // Subroutine dgemv 'Transpose' with alpha = -1 and beta = 1
+        dgemv(k + 1, k); // Subroutine dgemv 'Transpose' with alpha = -1 and beta = 1
       }
 
       // Interchange rows K and IPIV(K).
@@ -221,8 +219,8 @@ function solveUsingFactorization(L, ipiv, bin) {
     else {
       // 2 x 2 diagonal block, multiply by inv(L**T(k-1)), where L(k-1) is the transformation stored in columns k-1 and k of L.
       if (k < n - 1) {
-        dgemv(k);
-        dgemv(k - 1);
+        dgemv(k + 1, k);
+        dgemv(k + 1, k - 1);
       }
 
       // Interchange rows k and -ipiv(k).
