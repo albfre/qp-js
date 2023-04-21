@@ -3,25 +3,30 @@ function symmetricIndefiniteFactorization(Ain) {
   const A = Ain.map(row => [...row]);
   const n = A.length;
   const alpha = (1.0 + Math.sqrt(17)) / 8;
-  const ipiv = zeroVector(n);
+  const ipiv = new Array(n).fill(0.0);
 
-  let info = 0;
-
-  let k = 0; // k is the main loop index, increasing from 1 to n in steps of 1 or 2
-  while (k < n) {
-    let kstep = 1
-    let kp = 0;
-    const absakk = Math.abs(A[k][k]);
-    // imax is the row-index of the largest off-diagonal element in column k, and colmax is its absolute value
+  function maxInRowOrColumn(iBegin, iEnd, constantIndex, checkColumn) {
     let imax = 0;
     let colmax = 0.0;
-    for (let i = k + 1; i < n; i++) {
-      const v = Math.abs(A[i][k]);
+    for (let i = iBegin; i < iEnd; i++) {
+      const v = Math.abs(checkColumn ? A[i][constantIndex] : A[constantIndex][i]);
       if (v > colmax) {
         colmax = v;
         imax = i;
       }
     }
+    return [imax, colmax];
+  }
+
+  let info = 0;
+
+  let k = 0; // k is the main loop index, increasing from 0 to n-1 in steps of 1 or 2
+  while (k < n) {
+    let kstep = 1;
+    let kp = 0;
+    const absakk = Math.abs(A[k][k]);
+    // imax is the row-index of the largest off-diagonal element in column k, and colmax is its absolute value
+    const [imax, colmax] = maxInRowOrColumn(k + 1, n, k, true);
     if (absakk === 0.0 && colmax === 0.0) {
       // Column k is zero: set info and continue
       if (info === 0) {
@@ -36,25 +41,12 @@ function symmetricIndefiniteFactorization(Ain) {
       }
       else {
         // jmax is the column-index of the largest off-diagonal element in row imax, and rowmax is its absolute value
-        let rowmax = 0.0;
-        let jmax = 0;
-        for (let j = k; j < imax; j++) {
-          const v = Math.abs(A[imax][j]);
-          if (v > rowmax) {
-            rowmax = v;
-            jmax = j;
-          }
-        }
-        for (let j = imax + 1; j < n; j++) {
-          const v = Math.abs(A[j][imax]);
-          if (v > rowmax) {
-            rowmax = v;
-            jmax = j;
-          }
-        }
+        const [jmax1, rowmax1] = maxInRowOrColumn(k, imax, imax, false);
+        const [jmax2, rowmax2] = maxInRowOrColumn(imax + 1, n, imax, true);
+        const [jax, rowmax] = rowmax1 >= rowmax2 ? [jmax1, rowmax1] : [jmax2, rowmax2];
         if (absakk * rowmax >= alpha * colmax * colmax) {
           // no interchange, use 1-by-1 pivot block
-          kp = k
+          kp = k;
         }
         else if (Math.abs(A[imax][imax]) >= alpha * rowmax) {
           // interchange rows and columns k and imax, use 1-by-1 pivot block
@@ -136,15 +128,12 @@ function symmetricIndefiniteFactorization(Ain) {
     k += kstep;
   }
 
-  return [A, ipiv];
+  return [A, ipiv, info];
 }
 
 function solveUsingFactorization(L, ipiv, bin) {
   // Solve A*X = B, where A = L*D*L**T.
   const b = [...bin];
-  assertIsMatrix(L);
-  L.every(row => assertAreEqualLengthVectors(row, b));
-  assertAreEqualLengthVectors(ipiv, b);
   const n = b.length;
 
   // First solve L*D*X = B, overwriting B with X.
@@ -194,7 +183,7 @@ function solveUsingFactorization(L, ipiv, bin) {
   }
 
   // Next solve L**T *X = B, overwriting B with X.
-  // k is the main loop index, decreasing from n - 1 to 0 in steps of 1 or 2, depending on the size of the diagonal blocks.
+  // k is the main loop index, decreasing from n-1 to 0 in steps of 1 or 2, depending on the size of the diagonal blocks.
   function dgemv(i_start, j_index) {
     let temp = 0.0;
     for (let i = i_start; i < n; ++i) {
@@ -239,9 +228,9 @@ function solveUsingFactorization(L, ipiv, bin) {
 
 function symmetricIndefiniteFactorization_unstable(A) {
   const n = A.length;
-  const L = zeroMatrix(n, n);
-  const D = zeroVector(n);
-  const P = zeroVector(n).map((_, i) => i);
+  const L = new Array(m).fill().map(() => new Array(n).fill(v));
+  const D = new Array(n).fill(0.0);
+  const P = new Array(n).fill().map((_, i) => i);
 
   for (let i = 0; i < n; i++) {
     // Compute the (i,i) entry of D
@@ -267,13 +256,13 @@ function symmetricIndefiniteFactorization_unstable(A) {
     }
   }
 
-  return [L, D, P ];
+  return [L, D, P];
 }
 
 function solveUsingFactorization_unstable(L, D, b) {
   const n = L.length;
-  const x = zeroVector(n);
-  const y = zeroVector(n);
+  const x = new Array(n).fill(0.0);
+  const y = new Array(n).fill(0.0);
 
   // Forward substitution: solve Ly = b
   for (let i = 0; i < n; i++) {
