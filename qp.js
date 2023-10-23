@@ -96,7 +96,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
 
   // Initialize primal and dual variables
   const x = filledVector(n, 1.0);     // Primal variables
-  const s = filledVector(mIneq, 1.0);  // Slack variables for inequality constraints
+  const s = filledVector(mIneq, 1.0); // Slack variables for inequality constraints
   const y = filledVector(mEq, 1.0);   // Multipliers for equality constraints
   const z = filledVector(mIneq, 1.0); // Multipliers for inequality constraints
   
@@ -286,17 +286,9 @@ function add(x, y) {
   return x.map((value, index) => value + y[index]);
 }
 
-function addVectors(...vectors) {
-  return vectors.reduce((acc, vec) => add(acc, vec));
-}
-
 function subtract(x, y) {
   assertAreEqualLengthVectors(x, y);
   return x.map((value, index) => value - y[index]);
-}
-
-function subtractVectors(...vectors) {
-  return vectors.reduce((acc, vec) => subtract(acc, vec));
 }
 
 function norm(x) {

@@ -20,14 +20,6 @@ function parseTerms(str) {
   return matches;
 }
 
-function validateVariables(allVariables, newVariables) {
-  for (const key of newVariables) {
-    if (!allVariables.includes(key)) {
-      throw new Error('Variable "' + key + '" has no quadratic coefficient.');
-    }
-  }
-}
-
 function validatePowers(terms, allowedPowers) {
   for (const term of terms) {
     if (!allowedPowers.includes(term.power)) {
@@ -46,27 +38,28 @@ function parseObjective(str) {
   const terms = parseTerms(str);
   let linearCoefficients = {};
   let quadraticCoefficients = {};
+  const variableSet = new Set();
   validatePowers(terms, [1, 2]);
   for (const term of terms) {
     addOrInsert(term.power === 1 ? linearCoefficients : quadraticCoefficients, term);
+    variableSet.add(term.variable);
   }
+
   for (const key in quadraticCoefficients) {
     if (quadraticCoefficients[key] <= 0) {
       throw new Error('Variable "' + key + '" has negative quadratic coefficient.');
     }
   }
-  const variables = Object.keys(quadraticCoefficients).sort();
+  const variables = Array.from(variableSet).sort();
   const m = variables.length;
-
   const Q = zeroMatrix(m, m);
-  for (let i = 0; i < m; ++i) {
-    Q[i][i] = 2 * quadraticCoefficients[variables[i]];
+  for (const key in quadraticCoefficients) {
+    const index = variables.indexOf(key);
+    Q[index][index] = 2 * quadraticCoefficients[key];
   }
 
   const c = zeroVector(m);
-  const linearKeys = Object.keys(linearCoefficients);
-  validateVariables(variables, linearKeys);
-  for (const key of linearKeys) {
+  for (const key in linearCoefficients) {
     const index = variables.indexOf(key);
     c[index] = linearCoefficients[key];
   }
@@ -110,9 +103,10 @@ function parseConstraints(variables, constraints) {
     for (let i = 0; i < cs.length; i++) {
       const c = cs[i];
       const sign = c.separator === '<=' ? -1 : 1;
-      const constraintVariables = Object.keys(c.coefficients);
-      validateVariables(variables, constraintVariables);
       for (const v in c.coefficients) {
+        if (!variables.includes(v)) {
+          throw new Error('Constraint variable "' + v + '" is not included in the objective.');
+        }
         A[i][variables.indexOf(v)] = sign * c.coefficients[v];
       }
       b[i] = sign * c.rhs;
