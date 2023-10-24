@@ -29,6 +29,11 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
   const AineqT = transpose(Aineq);
   const AeqT = transpose(Aeq);
 
+  // Define the function for computing the residual rS
+  function evalRS(s, z, mu) {
+    return subtract(elementwiseProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
+  }
+
   // Define the function for evaluating the objective and constraints
   function evalFunc(x, s, y, z, mu) {
     const Hx = matrixTimesVector(H, x);
@@ -40,17 +45,17 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
 
     // Residuals
     let rGrad = add(Hx, c); // Hx + c + Aeq' y - Aineq' z
-    if (mEq > 0 ) {
+    if (mEq > 0) {
       const AeqTy = matrixTimesVector(AeqT, y);
       rGrad = add(rGrad, AeqTy);
     }
-    if (mIneq > 0 ) {
+    if (mIneq > 0) {
       const AineqTz = matrixTimesVector(AineqT, z);
       rGrad = subtract(rGrad, AineqTz);
     }
     const rEq = subtract(Aeqx, beq); // Aeq x - beq
     const rIneq = subtract(subtract(Aineqx, s), bineq); // Aineq x - s - bineq
-    const rS = subtract(elementwiseProduct(s, z), new Array(mIneq).fill(mu)); // SZe - mu e
+    const rS = evalRS(s, z, mu); // SZe - mu e
 
     return { f, rGrad, rEq, rIneq, rS };
   }
@@ -141,7 +146,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
     // Compute aggregated centering-corrector direction
     const mu = getMu(s, z);
     const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
-    const { rS : rSCenter } = evalFunc(x, s, y, z, sigma * mu);
+    const { rS : rSCenter } = evalRS(s, z, sigma * mu);
     const rSCenterCorr = add(elementwiseProduct(dzAff, dsAff), rS);
     const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, ipiv, rGrad, rEq, rIneq, rSCenterCorr);
     const alphaP = getMaxStep(s, ds);
