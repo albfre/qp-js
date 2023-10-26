@@ -146,8 +146,8 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
     // Compute aggregated centering-corrector direction
     const mu = getMu(s, z);
     const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
-    const { rS : rSCenter } = evalRS(s, z, sigma * mu);
-    const rSCenterCorr = add(elementwiseProduct(dzAff, dsAff), rS);
+    const rSCenter = evalRS(s, z, sigma * mu);
+    const rSCenterCorr = add(elementwiseProduct(dzAff, dsAff), rSCenter);
     const { dx, ds, dy, dz } = computeSearchDirection(s, z, L, ipiv, rGrad, rEq, rIneq, rSCenterCorr);
     const alphaP = getMaxStep(s, ds);
     const alphaD = getMaxStep(z, dz);
