@@ -79,8 +79,8 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
 
   // Define the function for computing the search direction
   function computeSearchDirection(s, z, L, ipiv, rGrad, rEq, rIneq, rS) {
-    const rIneqMinusYinvrS = add(rIneq, elementwiseDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
-    const rhs = negate(rGrad.concat(rEq).concat(rIneqMinusYinvrS));
+    const rIneqMinusZinvrS = add(rIneq, elementwiseDivision(rS, z)); // Aineq x - s - bineq + Z^-1 (SZe - mue)
+    const rhs = negate(rGrad.concat(rEq).concat(rIneqMinusZinvrS));
 
     // Solve the KKT system
     const d = solveUsingFactorization(L, ipiv, rhs);
