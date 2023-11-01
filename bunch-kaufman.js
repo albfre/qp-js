@@ -43,7 +43,7 @@ function symmetricIndefiniteFactorization(Ain) {
         // jmax is the column-index of the largest off-diagonal element in row imax, and rowmax is its absolute value
         const [jmax1, rowmax1] = maxInRowOrColumn(k, imax, imax, false);
         const [jmax2, rowmax2] = maxInRowOrColumn(imax + 1, n, imax, true);
-        const [jax, rowmax] = rowmax1 >= rowmax2 ? [jmax1, rowmax1] : [jmax2, rowmax2];
+        const rowmax = Math.max(rowmax1, rowmax2)
         if (absakk * rowmax >= alpha * colmax * colmax) {
           // no interchange, use 1-by-1 pivot block
           kp = k;
