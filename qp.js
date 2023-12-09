@@ -154,7 +154,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
     const alphaD = getMaxStep(z, dz);
 
     // Update the variables
-    const fractionToBoundary = 0.995;
+    const fractionToBoundary = mIneq > 0 ? 0.995 : 1.0;
     vectorPlusEqScalarTimesVector(x, fractionToBoundary * alphaP, dx);
     vectorPlusEqScalarTimesVector(s, fractionToBoundary * alphaP, ds);
     vectorPlusEqScalarTimesVector(y, fractionToBoundary * alphaD, dy);
