@@ -152,6 +152,37 @@ function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
   }
 }
 
+function solveQP2(Q, c, A, lA, uA, lx, ux, variables = []) {
+  let solutionElement = document.getElementById("solution");
+  
+  try {
+    const start = performance.now();
+    const {x, f, res, gap, iter} = interiorPointQP(Q, c, A, lA, uA, lx, ux);
+    const end = performance.now();
+
+    let tableStr = '<table>';
+    function addRow(str, val) {
+      tableStr += `<tr><td>${str}</td><td>${val}</td></tr>`;
+    }
+
+    addRow('Objective value', f);
+    addRow('Number of iterations', iter);
+    addRow('Residual', res);
+    addRow('Gap', gap);
+    addRow('Elapsed time', `${end - start} milliseconds`);
+    for (let i = 0; i < x.length; i++) {
+      addRow(variables.length === x.length ? variables[i] : `x${i}`, x[i]);
+    }
+    addRow('Variable vector', x);
+    tableStr += '</table>';
+
+    solutionElement.innerHTML = tableStr;
+
+  } catch (error) {
+    solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
+  }
+}
+
 function solve() {
   const objective = document.getElementById("objective").value;
   const table = document.getElementById("optimization-problem");

@@ -1,5 +1,60 @@
 function solveTestProblem() {
   if (false) {
+    let n = 3;
+    let m = 1;
+    const Q = zeroMatrix(n, n);
+    const c = zeroVector(n);
+    const A = zeroMatrix(m, n);
+    const lA = zeroVector(m);
+    const uA = zeroVector(m);
+    const lx = zeroVector(n);
+    const ux = zeroVector(n);
+    c[1] = 100;
+    Q[0][0] = 1;
+    Q[1][1] = 1;
+    Q[2][2] = 1;
+    lx[0] = 8;
+    lx[1] = null;
+    lx[2] = 2;
+    ux[0] = null;
+    ux[1] = 1;
+    ux[2] = null;
+    A[0][0] = 1;
+    A[0][1] = 1;
+    A[0][2] = 0;
+    lA[0] = 10;
+    uA[0] = 10;
+    solveQP2(Q, c, A, lA, uA, lx, ux);
+  }
+  if (false) {
+    let n = 100;
+    let m = 2;
+    const Q = zeroMatrix(n, n);
+    const c = zeroVector(n);
+    const A = zeroMatrix(m, n);
+    const lA = zeroVector(m);
+    const uA = zeroVector(m);
+    const lx = zeroVector(n);
+    const ux = zeroVector(n);
+    for (let i = 0; i < n; ++i) {
+      Q[i][n-i-1] = 1.2 + 0.1;
+      Q[n-i-1][i] = 1.2 + 0.1;
+
+      Q[i][i] = i + 3;
+      c[i] = -0.5 * i;
+      lx[i] = i;
+      ux[i] = null;
+    }
+    A[0][1] = 1;
+    A[0][2] = 1;
+    lA[0] = null;
+    uA[0] = 5;
+    A[1][0] = 1;
+    lA[1] = null;
+    uA[1] = 7;
+    solveQP2(Q, c, A, lA, uA, lx, ux);
+  }
+  if (true) {
     let n = 100;
     const Q = zeroMatrix(n, n);
     const c = zeroVector(n);
@@ -22,7 +77,7 @@ function solveTestProblem() {
     Aeq[0][2] = -2;
     solveQP(Q, c, Aeq, beq, Aineq, bineq);
   }
-  else {
+  if (false) {
     let n = 2;
     const Q = zeroMatrix(n, n);
     const c = zeroVector(n);
