@@ -55,7 +55,7 @@ function solveTestProblem() {
     solveQP2(Q, c, A, lA, uA, lx, ux);
   }
   if (true) {
-    let n = 100;
+    let n = 300;
     const Q = zeroMatrix(n, n);
     const c = zeroVector(n);
     const Aineq = zeroMatrix(n, n);

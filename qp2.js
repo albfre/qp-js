@@ -1,3 +1,5 @@
+const useLDLT = true;
+
 function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
   /* minimize 0.5 x' H x + c' x
    *   st    Aeq x = beq
@@ -97,7 +99,7 @@ function interiorPointQP2(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   }
 
   // Define the function for computing the search direction
-  function computeSearchDirection(L, ipiv, v, r) {
+  function computeSearchDirection(L, ipivOrD, v, r) {
     const yPart = v.y.map((yi, i) => (v.lambda_y[i] * r.lambda_y[i] + r.y[i]) / yi); // Y^-1 (L_y r_lambda_y + r_y)
     const zPart = v.z.map((zi, i) => (v.lambda_z[i] * r.lambda_z[i] - r.z[i]) / zi); // Z^-1 (L_z r_lambda_z - r_z)
     const rhs1 = r.x.map((rxi, i) => -(rxi + yPart[i] + zPart[i]));
@@ -111,7 +113,7 @@ function interiorPointQP2(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     const rhs = rhs1.concat(rhs2);
 
     // Solve the KKT system
-    const delta = solveUsingFactorization(L, ipiv, rhs);
+    const delta = useLDLT ? solveLDLT(L, ipivOrD, rhs) : solveUsingFactorization(L, ipivOrD, rhs);
 
     // Extract the search direction components
     const d = structuredClone(v);
@@ -201,12 +203,12 @@ function interiorPointQP2(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
 
     // Update and factorize KKT matrix
     updateMatrix(variablesAndMultipliers);
-    const [L, ipiv] = symmetricIndefiniteFactorization(KKT);
+    const [L, ipivOrD] = useLDLT ? ldltDecomposition(KKT) : symmetricIndefiniteFactorization(KKT);
 
     // Use the predictor-corrector method
 
     // Compute affine scaling step
-    const delta_aff = computeSearchDirection(L, ipiv, variablesAndMultipliers, residuals);
+    const delta_aff = computeSearchDirection(L, ipivOrD, variablesAndMultipliers, residuals);
     const { alphaP : alphaP_aff, alphaD : alphaD_aff } = getMaxStep(variablesAndMultipliers, delta_aff);
 
     const v_aff = structuredClone(variablesAndMultipliers);
@@ -221,7 +223,7 @@ function interiorPointQP2(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     residuals.t = uA.map((uAi, i) => uAi === null ? 0.0 : delta_aff.t[i] * delta_aff.lambda_t[i] + r_center.r_t[i]);
     residuals.y = lx.map((lxi, i) => lxi === null ? 0.0 : delta_aff.y[i] * delta_aff.lambda_y[i] + r_center.r_y[i]);
     residuals.z = ux.map((uxi, i) => uxi === null ? 0.0 : delta_aff.z[i] * delta_aff.lambda_z[i] + r_center.r_z[i]);
-    const delta = computeSearchDirection(L, ipiv, variablesAndMultipliers, residuals);
+    const delta = computeSearchDirection(L, ipivOrD, variablesAndMultipliers, residuals);
     const { alphaP, alphaD } = getMaxStep(variablesAndMultipliers, delta);
 
     // Update the variables
