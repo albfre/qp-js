@@ -39,7 +39,7 @@ function solveLDLT(L, D, b) {
 
   // Solve for z (D * z = y)
   for (let i = 0; i < n; i++) {
-    y[i] = y[i] / D[i];
+    y[i] /= D[i];
   }
 
   // Backward substitution (L^T * y = z)
