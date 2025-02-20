@@ -85,21 +85,22 @@ function parseConstraint(str) {
 
 function parseConstraints(variables, constraints) {
   const m = variables.length;
-  let ineqs = [];
-  let eqs = [];
+  let Acs = [];
+  let xcs = [];
   for (const constraint of constraints) {
     const { coefficients, separator, rhs } = parseConstraint(constraint);
-    if (separator === '=') {
-      eqs.push({ coefficients, separator, rhs });
+    if (coefficients.length === 1) {
+      xcs.push({ coefficients, separator, rhs });
     }
     else {
-      ineqs.push({ coefficients, separator, rhs });
+      Acs.push({ coefficients, separator, rhs });
     }
   }
 
   function createConstraints(cs) {
     const A = zeroMatrix(cs.length, m);
-    const b = zeroVector(cs.length);
+    const l = zeroVector(cs.length);
+    const u = zeroVector(cs.length).fill(null);
     for (let i = 0; i < cs.length; i++) {
       const c = cs[i];
       const sign = c.separator === '<=' ? -1 : 1;
@@ -109,50 +110,51 @@ function parseConstraints(variables, constraints) {
         }
         A[i][variables.indexOf(v)] = sign * c.coefficients[v];
       }
-      b[i] = sign * c.rhs;
+      l[i] = sign * c.rhs;
+      if (c.separator === '=') {
+        u[i] = sign * c.rhs;
+      }
     }
-    return { A, b };
+    return { A, l, u };
   }
 
-  const { A: Aeq, b: beq } = createConstraints(eqs);
-  const { A: Aineq, b: bineq } = createConstraints(ineqs);
+  function createBounds(cs) {
+    const l = zeroVector(m).fill(null);
+    const u = zeroVector(m).fill(null);
+    for (let i = 0; i < cs.length; i++) {
+      const c = cs[i];
+      if (c.coefficients.length !== 1) {
+        throw new Error('Not a bound: ' + c.coefficients);
+      }
+      const sign = c.separator === '<=' ? -1 : 1;
+      for (const v in c.coefficients) {
+        if (!variables.includes(v)) {
+          throw new Error('Constraint variable "' + v + '" is not included in the objective.');
+        }
+        const coefficient = c.coefficients[v];
+        const index = variables.indexOf(v);
+        if (coefficient !== 0.0) {
+          const isPositive = coefficient > 0.0;
+          if (c.separator !== (isPositive ? '>=' : '<=')) {
+            l[index] = c.rhs / coefficient;
+          }
+          if (c.separator !== (isPositive ? '<=' : '>=')) {
+            u[index] = c.rhs / coefficient;
+          }
+        }
+      }
+    }
+    return { l, u };
+  }
 
-  return { Aeq, beq, Aineq, bineq };
+  const { A, l : lA, u : uA } = createConstraints(Acs);
+  const { l : lx, u : ux } = createBounds(xcs);
+
+  return { A, lA, uA, lx, ux };
 }
 
 // Functions relating html page
-function solveQP(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
-  let solutionElement = document.getElementById("solution");
-  
-  try {
-    const start = performance.now();
-    const {x, f, res, gap, iter} = interiorPointQP(Q, c, Aeq, beq, Aineq, bineq);
-    const end = performance.now();
-
-    let tableStr = '<table>';
-    function addRow(str, val) {
-      tableStr += `<tr><td>${str}</td><td>${val}</td></tr>`;
-    }
-
-    addRow('Objective value', f);
-    addRow('Number of iterations', iter);
-    addRow('Residual', res);
-    addRow('Gap', gap);
-    addRow('Elapsed time', `${end - start} milliseconds`);
-    for (let i = 0; i < x.length; i++) {
-      addRow(variables.length === x.length ? variables[i] : `x${i}`, x[i]);
-    }
-    addRow('Variable vector', x);
-    tableStr += '</table>';
-
-    solutionElement.innerHTML = tableStr;
-
-  } catch (error) {
-    solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;
-  }
-}
-
-function solveQP2(Q, c, A, lA, uA, lx, ux, variables = []) {
+function solveQP(Q, c, A, lA, uA, lx, ux, variables = []) {
   let solutionElement = document.getElementById("solution");
   
   try {
@@ -161,9 +163,7 @@ function solveQP2(Q, c, A, lA, uA, lx, ux, variables = []) {
     const end = performance.now();
 
     let tableStr = '<table>';
-    function addRow(str, val) {
-      tableStr += `<tr><td>${str}</td><td>${val}</td></tr>`;
-    }
+    const addRow = (str, val) => tableStr += `<tr><td class="no-wrap">${str}</td><td>${val}</td></tr>\n`;
 
     addRow('Objective value', f);
     addRow('Number of iterations', iter);
@@ -173,7 +173,7 @@ function solveQP2(Q, c, A, lA, uA, lx, ux, variables = []) {
     for (let i = 0; i < x.length; i++) {
       addRow(variables.length === x.length ? variables[i] : `x${i}`, x[i]);
     }
-    addRow('Variable vector', x);
+    addRow('Variable vector', x.join(', '));
     tableStr += '</table>';
 
     solutionElement.innerHTML = tableStr;
@@ -183,18 +183,40 @@ function solveQP2(Q, c, A, lA, uA, lx, ux, variables = []) {
   }
 }
 
+function solveQP_old(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
+  const n = Q.length;
+  const mEq = Aeq.length;
+  const mIneq = Aineq.length;
+  const A = Aeq.concat(Aineq);
+  let lA = zeroVector(mEq + mIneq);
+  let uA = zeroVector(mEq + mIneq);
+  for (let i = 0; i < mEq; ++i) {
+    lA[i] = beq[i];
+    uA[i] = beq[i];
+  }
+  for (let i = 0; i < mIneq; ++i) {
+    lA[i + mEq] = bineq[i];
+    uA[i + mEq] = null;
+  }
+  let lx = zeroVector(n).fill(null);
+  let ux = zeroVector(n).fill(null);
+  return solveQP(Q, c, A, lA, uA, lx, ux, variables);
+}
+
 function solve() {
   const objective = document.getElementById("objective").value;
   const table = document.getElementById("optimization-problem");
   let constraints = [];
-  for (let i = 2; i < table.rows.length; i++) {
-    const constraint = document.getElementById(`constraint-${i}`).textContent;
-    constraints.push(constraint);
+  for (let i = 0; i < table.rows.length; i++) {
+    const constraint = document.getElementById(`constraint-${i}`);
+    if (constraint) {
+      constraints.push(constraint.textContent);
+    }
   }
   try {
     const { Q, c, variables } = parseObjective(objective);
-    const { Aeq, beq, Aineq, bineq } = parseConstraints(variables, constraints)
-    solveQP(Q, c, Aeq, beq, Aineq, bineq, variables);
+    const { A, lA, uA, lx, ux } = parseConstraints(variables, constraints)
+    solveQP(Q, c, A, lA, uA, lx, ux, variables);
   } catch (error) {
     let solutionElement = document.getElementById("solution");
     solutionElement.innerHTML = `Error ${error.lineNumber}: ${error.message}`;

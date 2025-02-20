@@ -1,46 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Quadratic programming solver</title>
-  <style>
-    body {
-      font-family: Helvetica, Arial, sans-serif;
-      font-size: 16px;
-      font-weight: normal;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quadratic Programming Solver</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>Quadratic programming solver</h1>
-  <form>
-    <p>
+
+  <div class="container">
+    <h1>Quadratic Programming Solver</h1>
+    <form>
       <table id="optimization-problem">
         <tr>
-          <td>minimize</td>
-          <td><input type="text" id="objective" size="30" value="x^2 + y^2 - 2x"> (objective on the form "x^2 - 3x + y^2 + 4z^2 - z")</td>
-        </tr>
-        <tr>
-          <td>subject to</td>
+          <td><strong>Minimize:</strong></td>
           <td>
-            <input type="text" id="constraint" size="30" value="x <= 1">
-            <button type="button" id="add-constraint-button">Add constraint</button>
-            (linear constraint on the form "-x + 2z = 4", supporting "=", "<=" and ">=")
+            <input type="text" id="objective" value="x^2 + y^2 - 2x">
+          </td>
+          <td>
+            <div class="info-icon">
+              i
+              <div class="tooltip">Objective on the form "x^2 - 3x + y^2 + 4z^2 - z"</div>
+            </div>
           </td>
         </tr>
+        <tr>
+          <td><strong>Subject to:</strong></td>
+          <td><input type="text" id="constraint" value="x <= 1"></td>
+          <td>
+            <div class="info-icon">
+              i
+              <div class="tooltip">Linear constraint on the form "-x + 2z = 4", supporting "=", "<=" and ">="</div>
+            </div>
+          </td>
+          <td><button type="button" id="add-constraint-button">Add</button></td>
+        </tr>
       </table>
-    </p>
 
-    <button type="button" id="clear-button">Clear</button>
-    <button type="button" id="solve-button">Solve</button>
-    <button type="button" id="test-button">Test</button>
-  </form>
-  <h2>Solution</h2>
-  <p id="solution"></p>
+      <div>
+        <button type="button" id="clear-button">Clear</button>
+        <button type="button" id="solve-button">Solve</button>
+        <button type="button" id="test-button">Test</button>
+      </div>
+    </form>
+
+    <h2>Solution</h2>
+    <p id="solution"></p>
+  </div>
+
   <script src="bunch-kaufman.js"></script>
   <script src="ldlt-decomposition.js"></script>
-  <script src="qp2.js"></script>
+  <script src="qp-slacks.js"></script>
   <script src="presentation.js"></script>
   <script src="test-problem.js"></script>
+
 </body>
 </html>

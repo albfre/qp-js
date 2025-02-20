@@ -1,6 +1,6 @@
 const useLDLT = true;
 
-function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
+function interiorPointQP_old(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
   /* minimize 0.5 x' H x + c' x
    *   st    Aeq x = beq
    *         Aineq x >= bineq
@@ -24,7 +24,7 @@ function interiorPointQP(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100) {
    return interiorPointQP2(H, c, A, lA, uA, lx, ux, tol, maxIter);
 }
 
-function interiorPointQP2(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
+function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   /* minimize 0.5 x' H x + c' x
    *   st    lA <= A <= uA
    *         lx <= x <= ux 

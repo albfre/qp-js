@@ -24,7 +24,7 @@ function solveTestProblem() {
     A[0][2] = 0;
     lA[0] = 10;
     uA[0] = 10;
-    solveQP2(Q, c, A, lA, uA, lx, ux);
+    solveQP(Q, c, A, lA, uA, lx, ux);
   }
   if (false) {
     let n = 100;
@@ -52,10 +52,10 @@ function solveTestProblem() {
     A[1][0] = 1;
     lA[1] = null;
     uA[1] = 7;
-    solveQP2(Q, c, A, lA, uA, lx, ux);
+    solveQP(Q, c, A, lA, uA, lx, ux);
   }
   if (true) {
-    let n = 300;
+    let n = 10;
     const Q = zeroMatrix(n, n);
     const c = zeroVector(n);
     const Aineq = zeroMatrix(n, n);
@@ -75,7 +75,7 @@ function solveTestProblem() {
     beq = zeroVector(1);
     Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
     Aeq[0][2] = -2;
-    solveQP(Q, c, Aeq, beq, Aineq, bineq);
+    solveQP_old(Q, c, Aeq, beq, Aineq, bineq);
   }
   if (false) {
     let n = 2;
