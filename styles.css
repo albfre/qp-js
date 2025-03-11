@@ -13,7 +13,7 @@ body {
 
 .container {
   background: rgba(30, 30, 30, 0.8); /* Semi-transparent dark container */
-  padding: 30px;
+  padding: 20px;
   max-width: 800px;
   width: 90%;
   box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.7); /* Deeper shadow for a more intense feel */
@@ -24,6 +24,7 @@ body {
 h1, h2 {
   color: #b2513c; /* Rich reddish-brown for headings */
   font-family: 'Arial', sans-serif;
+  word-wrap: break-word; /* Prevents heading overflow on small screens */
 }
 
 table {
@@ -32,25 +33,49 @@ table {
   border-collapse: collapse;
 }
 
+tr {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
 td {
-  padding: 12px;
+  padding: 8px;
   vertical-align: middle;
   text-align: left;
   color: #fff; /* White text in table for contrast */
+  flex: 1 1 200px; /* Allows cells to wrap while maintaining min width */
 }
 
 td.no-wrap {
-  white-space: nowrap;
+  white-space: normal; /* Allow wrapping on mobile */
+  flex: 1 1 100%; /* Full width for label cells on mobile */
+}
+
+/* On larger screens, preserve no-wrap behavior */
+@media (min-width: 768px) {
+  tr {
+    display: table-row;
+  }
+  
+  td {
+    display: table-cell;
+  }
+  
+  td.no-wrap {
+    white-space: nowrap;
+    width: auto;
+  }
 }
 
 input[type="text"] {
-  width: calc(100% - 10px);
+  width: 100%;
   padding: 12px;
   border: 1px solid #4e4b4b; /* Dark grey border for inputs */
   border-radius: 5px;
   font-size: 16px;
   color: #e3e3e3;
-  min-width: 240px;
+  box-sizing: border-box; /* Include padding in width calculation */
   background-color: #2e2b2b; /* Darker background for input */
 }
 
@@ -75,6 +100,7 @@ button:hover {
   font-weight: bold;
   color: #a4b96e; /* Muted green for the solution, giving it a subtle "hope" vibe */
   margin-top: 10px;
+  word-wrap: break-word; /* Ensures solution text doesn't overflow */
 }
 
 /* Style for the info icon */
@@ -97,10 +123,11 @@ button:hover {
   background-color: #8d3421; /* Slightly darker reddish-brown on hover */
 }
 
-/* Tooltip text styling */
+/* Tooltip text styling - responsive version */
 .info-icon .tooltip {
   visibility: hidden;
-  width: 400px;
+  width: 80vw; /* Use viewport width for mobile */
+  max-width: 400px; /* Maximum width for larger screens */
   background-color: #444;
   color: #fff;
   text-align: center;
@@ -108,16 +135,39 @@ button:hover {
   padding: 8px;
   position: absolute;
   z-index: 1;
-  bottom: 100%;
+  bottom: 120%; /* Position above the icon */
   left: 50%;
-  margin-left: -125px; /* Center the tooltip */
+  transform: translateX(-50%); /* Center the tooltip properly */
   opacity: 0;
   transition: opacity 0.3s ease, visibility 0s 0.3s; /* Smooth fade-in */
 }
 
-/* Show tooltip on hover */
+/* Position tooltip differently on mobile */
+@media (max-width: 600px) {
+  .info-icon .tooltip {
+    bottom: auto;
+    top: 120%; /* Position below the icon on mobile */
+    left: 0; /* Align with left edge on mobile */
+    transform: none;
+  }
+}
+
+/* Show tooltip on hover or touch */
 .info-icon:hover .tooltip {
   visibility: visible;
   opacity: 1;
   transition-delay: 0.3s; /* Delay the appearance of the tooltip */
+}
+
+/* Additional fixes for mobile */
+@media (max-width: 480px) {
+  .container {
+    padding: 15px;
+    width: 95%;
+  }
+  
+  button {
+    width: 100%;
+    margin: 10px 0;
+  }
 }
