@@ -9,8 +9,8 @@ function interiorPointQP_old(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100
    const mEq = Aeq.length;
    const mIneq = Aineq.length;
    const A = Aeq.concat(Aineq);
-   let lA = zeroVector(mEq + mIneq);
-   let uA = zeroVector(mEq + mIneq);
+   let lA = createVector(mEq + mIneq);
+   let uA = createVector(mEq + mIneq);
    for (let i = 0; i < mEq; ++i) {
      lA[i] = beq[i];
      uA[i] = beq[i];
@@ -19,8 +19,8 @@ function interiorPointQP_old(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100
      lA[i + mEq] = bineq[i];
      uA[i + mEq] = null;
    }
-   let lx = zeroVector(n).fill(null);
-   let ux = zeroVector(n).fill(null);
+   let lx = createVector(n).fill(null);
+   let ux = createVector(n).fill(null);
    return interiorPointQP2(H, c, A, lA, uA, lx, ux, tol, maxIter);
 }
 
@@ -45,20 +45,19 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
 
   const AT = transpose(A);
 
-  function evalSlackResiduals(v, mu) {
-    const r_g = lA.map((lAi, i) => lAi === null ? 0.0 : v.g[i] * v.lambda_g[i] - mu); // G Lambda_g e - mu e
-    const r_t = uA.map((uAi, i) => uAi === null ? 0.0 : v.t[i] * v.lambda_t[i] - mu); // T Lambda_t e - mu e
-    const r_y = lx.map((lxi, i) => lxi === null ? 0.0 : v.y[i] * v.lambda_y[i] - mu); // Y Lambda_y e - mu e
-    const r_z = ux.map((uxi, i) => uxi === null ? 0.0 : v.z[i] * v.lambda_z[i] - mu); // Z Lambda_z e - mu e
-    return { r_g, r_t, r_y, r_z };
-  }
+  const evalSlackResiduals = (v, mu) => ({
+    r_g: lA.map((lAi, i) => lAi === null ? 0.0 : v.g[i] * v.lambda_g[i] - mu), // G Lambda_g e - mu e
+    r_t: uA.map((uAi, i) => uAi === null ? 0.0 : v.t[i] * v.lambda_t[i] - mu), // T Lambda_t e - mu e
+    r_y: lx.map((lxi, i) => lxi === null ? 0.0 : v.y[i] * v.lambda_y[i] - mu), // Y Lambda_y e - mu e
+    r_z: ux.map((uxi, i) => uxi === null ? 0.0 : v.z[i] * v.lambda_z[i] - mu) // Z Lambda_z e - mu e
+  });
 
   // Define the function for evaluating the objective and constraints and compute the residuals
-  function evalFunc(v, mu) {
+  const evalFunc = (v, mu) => {
     const Hx = matrixTimesVector(H, v.x);
     const Ax = matrixTimesVector(A, v.x);
 
-    // Objective
+    // Objective value
     const f = 0.5 * dot(v.x, Hx) + dot(c, v.x); // 0.5 x' H x + c' x
 
     // Residuals
@@ -85,13 +84,13 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   /*  [ H + Y^-1 Lambda_y + Z^-1 Lambda_z  A'                                  ]
    *  [ A                                  -(G^-1 Lambda_g + T^-1 Lambda_t)^-1 ]
   */
-  const KKT = zeroMatrix(n + m, n + m);
+  const KKT = createMatrix(n + m, n + m);
   setSubmatrix(KKT, H, 0, 0);
   setSubmatrix(KKT, AT, 0, n);
   setSubmatrix(KKT, A, n, 0);
   const hDiag = H.map((row, i) => row[i]);
 
-  function updateMatrix(v) {
+  const updateMatrix = (v) => {
     const newHDiag = hDiag.map((val, i) => val + v.lambda_y[i] / v.y[i] + v.lambda_z[i] / v.z[i]);
     setSubdiagonal(KKT, newHDiag, 0, 0);
     const d = Array.from({ length: m }, (_, i) => -1.0 / (v.lambda_g[i] / v.g[i] + v.lambda_t[i] / v.t[i]));
@@ -99,7 +98,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   }
 
   // Define the function for computing the search direction
-  function computeSearchDirection(L, ipivOrD, v, r) {
+  const computeSearchDirection = (L, ipivOrD, v, r) => {
     const yPart = v.y.map((yi, i) => (v.lambda_y[i] * r.lambda_y[i] + r.y[i]) / yi); // Y^-1 (L_y r_lambda_y + r_y)
     const zPart = v.z.map((zi, i) => (v.lambda_z[i] * r.lambda_z[i] - r.z[i]) / zi); // Z^-1 (L_z r_lambda_z - r_z)
     const rhs1 = r.x.map((rxi, i) => -(rxi + yPart[i] + zPart[i]));
@@ -110,7 +109,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     const sPart = r.s.map((rsi, i) => rsi + tPart[i] + gPart[i]);
     const rhs2 = r.lambda_A.map((rLambda_Ai, i) => -(rLambda_Ai + sPart[i] / gtPart[i]));
 
-    const rhs = rhs1.concat(rhs2);
+    const rhs = [...rhs1, ...rhs2];
 
     // Solve the KKT system
     const delta = useLDLT ? solveLDLT(L, ipivOrD, rhs) : solveUsingFactorization(L, ipivOrD, rhs);
@@ -134,30 +133,28 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   }
 
   // Initialize primal and dual variables
-  const x = filledVector(n, 1.0);
-  const y = filledVector(n, 1.0); // Slack for x
-  const z = filledVector(n, 1.0); // Slack for x
-  const lambda_y = lx.map(lxi => lxi === null ? 0.0 : 1.0);
-  const lambda_z = ux.map(uxi => uxi === null ? 0.0 : 1.0);
-
-  const s = filledVector(m, 1.0); // Slack variables for inequality constraints
-  const g = filledVector(m, 1.0); // Slack for s
-  const t = filledVector(m, 1.0); // Slack for s
-  const lambda_A = filledVector(m, 1.0);
-  const lambda_g = lA.map(lAi => lAi === null ? 0.0 : 1.0);
-  const lambda_t = uA.map(uAi => uAi === null ? 0.0 : 1.0);
-  const variablesAndMultipliers = { x, s, g, t, y, z, lambda_A, lambda_g, lambda_t, lambda_y, lambda_z };
+  const variables = {
+    x: createVector(n, 1.0),
+    s: createVector(m, 1.0), // Slack variables for inequality constraints
+    g: createVector(m, 1.0), // Slack for s
+    t: createVector(m, 1.0), // Slack for s
+    y: createVector(n, 1.0), // Slack for x
+    z: createVector(n, 1.0), // Slack for x
+    lambda_A: createVector(m, 1.0),
+    lambda_g: lA.map(lAi => lAi === null ? 0.0 : 1.0),
+    lambda_t: uA.map(uAi => uAi === null ? 0.0 : 1.0),
+    lambda_y: lx.map(lxi => lxi === null ? 0.0 : 1.0),
+    lambda_z: ux.map(uxi => uxi === null ? 0.0 : 1.0)
+  };
   
-  function getMu(v) {
-    return m > 0 ? (dot(v.g, v.lambda_g) + dot(v.t, v.lambda_t)) / m + (dot(v.y, v.lambda_y) + dot(v.z, v.lambda_z)) / n : 0.0;
-  }
+  const getMu = (v) =>
+    m > 0 ? (dot(v.g, v.lambda_g) + dot(v.t, v.lambda_t)) / m + (dot(v.y, v.lambda_y) + dot(v.z, v.lambda_z)) / n : 0.0;
 
-  function getResidualNorm(r) {
-    return norm([].concat(r.x, r.s, r.g, r.t, r.y, r.z, r.lambda_A, r.lambda_g, r.lambda_t, r.lambda_y, r.lambda_z));
-  }
+  const getResidualNorm = (r) =>
+    norm([].concat(r.x, r.s, r.g, r.t, r.y, r.z, r.lambda_A, r.lambda_g, r.lambda_t, r.lambda_y, r.lambda_z));
 
   // Define the function for computing the step size
-  function getMaxStep(v, dv) {
+  const getMaxStep = (v, dv) => {
     const getMaxStepSingle = (vs, dvs) => vs.reduce((m, value, i) => dvs[i] < 0 ? Math.min(-value / dvs[i], m) : m, 1.0);
     const alphaG = getMaxStepSingle(v.g, dv.g);
     const alphaT = getMaxStepSingle(v.t, dv.t);
@@ -172,9 +169,9 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     const alphaD = Math.min(alphaLambdaG, alphaLambdaT, alphaLambdaY, alphaLambdaZ);
     
     return { alphaP, alphaD };
-  }
+  };
 
-  function updateVariablesAndMultipliers(v, d, alphaP, alphaD) {
+  const updateVariables = (v, d, alphaP, alphaD) => {
     vectorPlusEqScalarTimesVector(v.x, alphaP, d.x);
     vectorPlusEqScalarTimesVector(v.s, alphaP, d.s);
     vectorPlusEqScalarTimesVector(v.g, alphaP, d.g);
@@ -186,56 +183,56 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     vectorPlusEqScalarTimesVector(v.lambda_t, alphaD, d.lambda_t);
     vectorPlusEqScalarTimesVector(v.lambda_y, alphaD, d.lambda_y);
     vectorPlusEqScalarTimesVector(v.lambda_z, alphaD, d.lambda_z);
-  }
+  };
 
   // Perform the interior point optimization
   let iter = 0;
   for (; iter < maxIter; iter++) {
-    const { f, r : residuals } = evalFunc(variablesAndMultipliers, 0.0);
+    const { f, r : residuals } = evalFunc(variables, 0.0);
 
     // Check the convergence criterion
     const residualNorm = getResidualNorm(residuals);
-    const mu = getMu(variablesAndMultipliers);
+    const mu = getMu(variables);
     console.log(`${iter}. f: ${f}, res: ${residualNorm}, gap: ${mu}`)
     if (residualNorm <= tol && mu <= tol) {
       break;
     }
 
     // Update and factorize KKT matrix
-    updateMatrix(variablesAndMultipliers);
+    updateMatrix(variables);
     const [L, ipivOrD] = useLDLT ? ldltDecomposition(KKT) : symmetricIndefiniteFactorization(KKT);
 
     // Use the predictor-corrector method
 
     // Compute affine scaling step
-    const delta_aff = computeSearchDirection(L, ipivOrD, variablesAndMultipliers, residuals);
-    const { alphaP : alphaP_aff, alphaD : alphaD_aff } = getMaxStep(variablesAndMultipliers, delta_aff);
+    const delta_aff = computeSearchDirection(L, ipivOrD, variables, residuals);
+    const { alphaP : alphaP_aff, alphaD : alphaD_aff } = getMaxStep(variables, delta_aff);
 
-    const v_aff = structuredClone(variablesAndMultipliers);
-    updateVariablesAndMultipliers(v_aff, delta_aff, alphaP_aff, alphaD_aff);
+    const v_aff = structuredClone(variables);
+    updateVariables(v_aff, delta_aff, alphaP_aff, alphaD_aff);
     const muAff = getMu(v_aff);
 
     // Compute aggregated centering-corrector direction
     const sigma = mu > 0 ? Math.pow(muAff / mu, 3.0) : 0;
 
-    const r_center = evalSlackResiduals(variablesAndMultipliers, sigma * mu);
+    const r_center = evalSlackResiduals(variables, sigma * mu);
     residuals.g = lA.map((lAi, i) => lAi === null ? 0.0 : delta_aff.g[i] * delta_aff.lambda_g[i] + r_center.r_g[i]);
     residuals.t = uA.map((uAi, i) => uAi === null ? 0.0 : delta_aff.t[i] * delta_aff.lambda_t[i] + r_center.r_t[i]);
     residuals.y = lx.map((lxi, i) => lxi === null ? 0.0 : delta_aff.y[i] * delta_aff.lambda_y[i] + r_center.r_y[i]);
     residuals.z = ux.map((uxi, i) => uxi === null ? 0.0 : delta_aff.z[i] * delta_aff.lambda_z[i] + r_center.r_z[i]);
-    const delta = computeSearchDirection(L, ipivOrD, variablesAndMultipliers, residuals);
-    const { alphaP, alphaD } = getMaxStep(variablesAndMultipliers, delta);
+    const delta = computeSearchDirection(L, ipivOrD, variables, residuals);
+    const { alphaP, alphaD } = getMaxStep(variables, delta);
 
     // Update the variables
     const fractionToBoundary = m > 0 ? 0.995 : 1.0;
-    updateVariablesAndMultipliers(variablesAndMultipliers, delta, fractionToBoundary * alphaP, fractionToBoundary * alphaD);
+    updateVariables(variables, delta, fractionToBoundary * alphaP, fractionToBoundary * alphaD);
   }
 
   // Return the solution and objective value
-  const { f, r : residuals } = evalFunc(variablesAndMultipliers, 0.0);
+  const { f, r : residuals } = evalFunc(variables, 0.0);
   const res = getResidualNorm(residuals);
-  const gap = getMu(variablesAndMultipliers);
-  return { x, f, res, gap, iter };
+  const gap = getMu(variables);
+  return { x : variables.x, f, res, gap, iter };
 }
 
 function sanityCheck(condition, message) {
@@ -243,10 +240,8 @@ function sanityCheck(condition, message) {
 }
 
 // Helper functions for linear algebra operations
-const filledVector = (n, v) => new Array(n).fill(v);
-const zeroVector = (n) => filledVector(n, 0.0);
-const filledMatrix = (m, n, v) => new Array(m).fill().map(() => new Array(n).fill(v));
-const zeroMatrix = (m, n) => filledMatrix(m, n, 0.0);
+const createVector = (n, initialValue = 0) => Array(n).fill(initialValue);
+const createMatrix = (rows, cols, initialValue = 0) => Array(rows).fill().map(() => Array(cols).fill(initialValue));
 const norm = (x) => Math.sqrt(dot(x, x));
 const isVector = (x) => Array.isArray(x) && x.every(xi => typeof xi === 'number');
 const assertIsVector = (x, name) => sanityCheck(isVector(x), 'Invalid input type: ' + name + ' must be an array. ' + name + ': ' + x);
@@ -266,21 +261,20 @@ function setSubmatrix(M, X, startI, startJ) {
   }
 }
 
-function setSubdiagonal(M, d, startI, startJ) {
-  const m = d.length;
-  sanityCheck(M.length >= m + startI, 'Invalid submatrix row');
-  for (let i = 0; i < m; i++) {
-    M[i + startI][i + startJ] = d[i];
-  }
+function setSubdiagonal(M, d, startRow, startCol) {
+  sanityCheck(M.length >= d.length + startRow, 'Invalid submatrix row');
+  d.forEach((value, i) => {
+    M[i + startRow][i + startCol] = value;
+  });
 }
 
 function diag(x) {
   assertIsVector(x, 'x');
   m = x.length;
-  X = zeroMatrix(m, m);
-  for (let i = 0; i < m; i++) {
-    X[i][i] = x[i];
-  }
+  X = createMatrix(m, m);
+  x.forEach((value, i) => {
+    X[i][i] = value;
+  });
   return X;
 }
 
@@ -294,7 +288,7 @@ function transpose(A) {
   assertIsMatrix(A);
   const m = A.length;
   const n = m > 0 ? A[0].length : 0;
-  const B = zeroMatrix(n, m);
+  const B = createMatrix(n, m);
   for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
       B[j][i] = A[i][j];

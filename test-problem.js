@@ -2,13 +2,13 @@ function solveTestProblem() {
   if (false) {
     let n = 3;
     let m = 1;
-    const Q = zeroMatrix(n, n);
-    const c = zeroVector(n);
-    const A = zeroMatrix(m, n);
-    const lA = zeroVector(m);
-    const uA = zeroVector(m);
-    const lx = zeroVector(n);
-    const ux = zeroVector(n);
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
+    const A = createMatrix(m, n);
+    const lA = createVector(m);
+    const uA = createVector(m);
+    const lx = createVector(n);
+    const ux = createVector(n);
     c[1] = 100;
     Q[0][0] = 1;
     Q[1][1] = 1;
@@ -29,13 +29,13 @@ function solveTestProblem() {
   if (false) {
     let n = 100;
     let m = 2;
-    const Q = zeroMatrix(n, n);
-    const c = zeroVector(n);
-    const A = zeroMatrix(m, n);
-    const lA = zeroVector(m);
-    const uA = zeroVector(m);
-    const lx = zeroVector(n);
-    const ux = zeroVector(n);
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
+    const A = createMatrix(m, n);
+    const lA = createVector(m);
+    const uA = createVector(m);
+    const lx = createVector(n);
+    const ux = createVector(n);
     for (let i = 0; i < n; ++i) {
       Q[i][n-i-1] = 1.2 + 0.1;
       Q[n-i-1][i] = 1.2 + 0.1;
@@ -56,10 +56,10 @@ function solveTestProblem() {
   }
   if (true) {
     let n = 10;
-    const Q = zeroMatrix(n, n);
-    const c = zeroVector(n);
-    const Aineq = zeroMatrix(n, n);
-    const bineq = zeroVector(n);
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
+    const Aineq = createMatrix(n, n);
+    const bineq = createVector(n);
     for (let i = 0; i < n; ++i) {
       Q[i][n-i-1] = 1.2 + 0.1;
       Q[n-i-1][i] = 1.2 + 0.1;
@@ -69,18 +69,18 @@ function solveTestProblem() {
       Aineq[i][i] = 1; // x[i] >= i
       bineq[i] = i * i * 0.01;
     }
-    let Aeq = zeroMatrix(0, 0);
-    let beq = zeroVector(0);
-    Aeq = zeroMatrix(1, n);
-    beq = zeroVector(1);
+    let Aeq = createMatrix(0, 0);
+    let beq = createVector(0);
+    Aeq = createMatrix(1, n);
+    beq = createVector(1);
     Aeq[0][1] = 1; // x[0] - 2 x[1] = 0
     Aeq[0][2] = -2;
     solveQP_old(Q, c, Aeq, beq, Aineq, bineq);
   }
   if (false) {
     let n = 2;
-    const Q = zeroMatrix(n, n);
-    const c = zeroVector(n);
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
     let t0 = 1300;
     let t1 = 50;
     let a00 = 809;
@@ -90,12 +90,12 @@ function solveTestProblem() {
 
 
     // e' x = 1
-    const Aeq = filledMatrix(1, n, 1.0);
-    const beq = filledVector(1, 1.0);
+    const Aeq = createMatrix(1, n, 1.0);
+    const beq = createVector(1, 1.0);
 
     // x >= 0
-    const Aineq = diag(filledVector(n, 1.0));
-    const bineq = zeroVector(n);
+    const Aineq = diag(createVector(n, 1.0));
+    const bineq = createVector(n);
 
     let k = 0;
     Q[0][0] = (a00**2) / t0**2 + k;
@@ -118,7 +118,7 @@ function solveTestProblem() {
     const AeqT = transpose(Aeq);
 
     const m = n + mEq + mIneq;
-    const KKT = zeroMatrix(m, m);
+    const KKT = createMatrix(m, m);
     setSubmatrix(KKT, Q, 0, 0);
     setSubmatrix(KKT, AeqT, 0, n);
     setSubmatrix(KKT, AineqT, 0, n + mEq);

@@ -52,13 +52,13 @@ function parseObjective(str) {
   }
   const variables = Array.from(variableSet).sort();
   const m = variables.length;
-  const Q = zeroMatrix(m, m);
+  const Q = createMatrix(m, m);
   for (const key in quadraticCoefficients) {
     const index = variables.indexOf(key);
     Q[index][index] = 2 * quadraticCoefficients[key];
   }
 
-  const c = zeroVector(m);
+  const c = createVector(m);
   for (const key in linearCoefficients) {
     const index = variables.indexOf(key);
     c[index] = linearCoefficients[key];
@@ -98,9 +98,9 @@ function parseConstraints(variables, constraints) {
   }
 
   function createConstraints(cs) {
-    const A = zeroMatrix(cs.length, m);
-    const l = zeroVector(cs.length);
-    const u = zeroVector(cs.length).fill(null);
+    const A = createMatrix(cs.length, m);
+    const l = createVector(cs.length);
+    const u = createVector(cs.length).fill(null);
     for (let i = 0; i < cs.length; i++) {
       const c = cs[i];
       const sign = c.separator === '<=' ? -1 : 1;
@@ -119,8 +119,8 @@ function parseConstraints(variables, constraints) {
   }
 
   function createBounds(cs) {
-    const l = zeroVector(m).fill(null);
-    const u = zeroVector(m).fill(null);
+    const l = createVector(m).fill(null);
+    const u = createVector(m).fill(null);
     for (let i = 0; i < cs.length; i++) {
       const c = cs[i];
       if (c.coefficients.length !== 1) {
@@ -188,8 +188,8 @@ function solveQP_old(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
   const mEq = Aeq.length;
   const mIneq = Aineq.length;
   const A = Aeq.concat(Aineq);
-  let lA = zeroVector(mEq + mIneq);
-  let uA = zeroVector(mEq + mIneq);
+  let lA = createVector(mEq + mIneq);
+  let uA = createVector(mEq + mIneq);
   for (let i = 0; i < mEq; ++i) {
     lA[i] = beq[i];
     uA[i] = beq[i];
@@ -198,8 +198,8 @@ function solveQP_old(Q, c, Aeq, beq, Aineq, bineq, variables = []) {
     lA[i + mEq] = bineq[i];
     uA[i + mEq] = null;
   }
-  let lx = zeroVector(n).fill(null);
-  let ux = zeroVector(n).fill(null);
+  let lx = createVector(n, null);
+  let ux = createVector(n, null);
   return solveQP(Q, c, A, lA, uA, lx, ux, variables);
 }
 
