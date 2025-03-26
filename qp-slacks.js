@@ -21,7 +21,7 @@ function interiorPointQP_old(H, c, Aeq, beq, Aineq, bineq, tol=1e-8, maxIter=100
    }
    let lx = createVector(n).fill(null);
    let ux = createVector(n).fill(null);
-   return interiorPointQP2(H, c, A, lA, uA, lx, ux, tol, maxIter);
+   return interiorPointQP(H, c, A, lA, uA, lx, ux, tol, maxIter);
 }
 
 function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
@@ -53,7 +53,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   });
 
   // Define the function for evaluating the objective and constraints and compute the residuals
-  const evalFunc = (v, mu) => {
+  const evalFunc = (v) => {
     const Hx = matrixTimesVector(H, v.x);
     const Ax = matrixTimesVector(A, v.x);
 
@@ -70,7 +70,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     }
 
     r.s = v.lambda_A.map((lambda_Ai, i) => -lambda_Ai - v.lambda_g[i] + v.lambda_t[i]); // -lambda_A - lambda_g + lambda_t
-    ({ r_g : r.g, r_t : r.t, r_y : r.y, r_z : r.z } = evalSlackResiduals(v, mu));
+    ({ r_g : r.g, r_t : r.t, r_y : r.y, r_z : r.z } = evalSlackResiduals(v, 0.0));
     r.lambda_A = Ax.map((Axi, i) => Axi - v.s[i]); // Ax - s
     r.lambda_g = lA.map((lAi, i) => lAi === null ? 0.0 : v.s[i] - v.g[i] - lAi); // s - g - lA
     r.lambda_t = uA.map((uAi, i) => uAi === null ? 0.0 : v.s[i] + v.t[i] - uAi); // s + t - uA
@@ -188,7 +188,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   // Perform the interior point optimization
   let iter = 0;
   for (; iter < maxIter; iter++) {
-    const { f, r : residuals } = evalFunc(variables, 0.0);
+    const { f, r : residuals } = evalFunc(variables);
 
     // Check the convergence criterion
     const residualNorm = getResidualNorm(residuals);
@@ -229,7 +229,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   }
 
   // Return the solution and objective value
-  const { f, r : residuals } = evalFunc(variables, 0.0);
+  const { f, r : residuals } = evalFunc(variables);
   const res = getResidualNorm(residuals);
   const gap = getMu(variables);
   return { x : variables.x, f, res, gap, iter };

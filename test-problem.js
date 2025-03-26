@@ -54,7 +54,60 @@ function solveTestProblem() {
     uA[1] = 7;
     solveQP(Q, c, A, lA, uA, lx, ux);
   }
-  if (true) {
+  if (true) { // Numerically challenging problem for Cholesky
+    let n = 2;
+    let m = 2;
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
+    const A = createMatrix(m, n);
+    const lA = createVector(m);
+    const uA = createVector(m);
+    const lx = createVector(n);
+    const ux = createVector(n);
+    c[0] = 1;
+    c[1] = 1;
+    A[0][0] = 1;
+    A[0][1] = 2;
+    A[1][0] = 2;
+    A[1][1] = 1;
+    lA[0] = 1;
+    lA[1] = 1;
+    uA[0] = null;
+    uA[1] = null;
+    lx[0] = 0;
+    ux[0] = null;
+    lx[1] = null;
+    ux[1] = null;
+    solveQP(Q, c, A, lA, uA, lx, ux);
+  }
+  if (false) {
+    let n = 5;
+    let m = 1;
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
+    const A = createMatrix(m, n, 1);
+    const lA = createVector(m, 1);
+    const uA = createVector(m, 1);
+    const lx = createVector(n, 0);
+    const ux = createVector(n, null);
+    for (let i = 0; i + 1 < n; i++) {
+      const row = createVector(n);
+      row[i] = 1;
+      row[i + 1] = -1;
+      A.push(row);
+      lA.push(0)
+      uA.push(null)
+    }
+    for (let i = 0; i < n; ++i) {
+      c[i] = i + 1;
+      for (let j = 0; j < n; ++j) {
+        Q[i][j] = i * j;
+      }
+      Q[i][i] = 3 * (i + 3) * (i+ 2);
+    }
+    solveQP(Q, c, A, lA, uA, lx, ux);
+  }
+  if (false) {
     let n = 10;
     const Q = createMatrix(n, n);
     const c = createVector(n);

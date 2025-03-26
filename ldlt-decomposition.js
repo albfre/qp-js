@@ -8,7 +8,8 @@ function ldltDecomposition(A) {
     for (let j = 0; j < i; j++) {
       sumD -= L[i][j] * L[i][j] * D[j];
     }
-    D[i] = sumD;
+    // Modify factorization to avoid zero diagonal (Vanderbei, Symmetric quasi-definite matrices, 1995)
+    D[i] = sumD == 0.0 ? 1e-8 : sumD;
 
     for (let j = i + 1; j < n; j++) {
       let sum = A[j][i];
