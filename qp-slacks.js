@@ -148,7 +148,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   };
   
   const getMu = (v) =>
-    m > 0 ? (dot(v.g, v.lambda_g) + dot(v.t, v.lambda_t)) / m + (dot(v.y, v.lambda_y) + dot(v.z, v.lambda_z)) / n : 0.0;
+    (m > 0 ? (dot(v.g, v.lambda_g) + dot(v.t, v.lambda_t)) / (2 * m) : 0.0) + (n > 0 ? (dot(v.y, v.lambda_y) + dot(v.z, v.lambda_z)) / (2 * n) : 0.0);
 
   const getResidualNorm = (r) =>
     norm([].concat(r.x, r.s, r.g, r.t, r.y, r.z, r.lambda_A, r.lambda_g, r.lambda_t, r.lambda_y, r.lambda_z));

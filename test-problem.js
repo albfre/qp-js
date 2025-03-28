@@ -26,7 +26,7 @@ function solveTestProblem() {
     uA[0] = 10;
     solveQP(Q, c, A, lA, uA, lx, ux);
   }
-  if (false) {
+  if (true) {
     let n = 100;
     let m = 2;
     const Q = createMatrix(n, n);
@@ -54,7 +54,7 @@ function solveTestProblem() {
     uA[1] = 7;
     solveQP(Q, c, A, lA, uA, lx, ux);
   }
-  if (true) { // Numerically challenging problem for Cholesky
+  if (false) { // Numerically challenging problem for Cholesky
     let n = 2;
     let m = 2;
     const Q = createMatrix(n, n);
