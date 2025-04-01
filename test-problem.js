@@ -27,6 +27,30 @@ function solveTestProblem() {
     solveQP(Q, c, A, lA, uA, lx, ux);
   }
   if (true) {
+    let n = 2;
+    let m = 1;
+    const Q = createMatrix(n, n);
+    const c = createVector(n);
+    const A = createMatrix(m, n);
+    const lA = createVector(m);
+    const uA = createVector(m);
+    const lx = createVector(n);
+    const ux = createVector(n);
+    Q[0][0] = 1;
+    Q[1][1] = 0.5;
+    c[0] = -10;
+    c[1] = 2;
+    A[0][0] = 1;
+    A[0][1] = 1;
+    lA[0] = 1;
+    uA[0] = 1;
+    lx[0] = 0;
+    lx[1] = 0;
+    ux[0] = 10;
+    ux[1] = 10;
+    solveQP(Q, c, A, lA, uA, lx, ux);
+  }
+  if (false) {
     let n = 100;
     let m = 2;
     const Q = createMatrix(n, n);

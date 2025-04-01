@@ -72,9 +72,9 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     r.s = v.lambda_A.map((lambda_Ai, i) => -lambda_Ai - v.lambda_g[i] + v.lambda_t[i]); // -lambda_A - lambda_g + lambda_t
     ({ r_g : r.g, r_t : r.t, r_y : r.y, r_z : r.z } = evalSlackResiduals(v, 0.0));
     r.lambda_A = Ax.map((Axi, i) => Axi - v.s[i]); // Ax - s
-    r.lambda_g = lA.map((lAi, i) => lAi === null ? 0.0 : v.s[i] - v.g[i] - lAi); // s - g - lA
+    r.lambda_g = lA.map((lAi, i) => lAi === null ? 0.0 : -v.s[i] + v.g[i] + lAi); // -s + g + lA
     r.lambda_t = uA.map((uAi, i) => uAi === null ? 0.0 : v.s[i] + v.t[i] - uAi); // s + t - uA
-    r.lambda_y = lx.map((lxi, i) => lxi === null ? 0.0 : v.x[i] - v.y[i] - lxi); // x - y - lx
+    r.lambda_y = lx.map((lxi, i) => lxi === null ? 0.0 : -v.x[i] + v.y[i] + lxi); // -x + y + lx
     r.lambda_z = ux.map((uxi, i) => uxi === null ? 0.0 : v.x[i] + v.z[i] - uxi); // x + z - ux
 
     return { f, r };
@@ -99,15 +99,15 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
 
   // Define the function for computing the search direction
   const computeSearchDirection = (L, ipivOrD, v, r) => {
-    const yPart = v.y.map((yi, i) => (v.lambda_y[i] * r.lambda_y[i] + r.y[i]) / yi); // Y^-1 (L_y r_lambda_y + r_y)
-    const zPart = v.z.map((zi, i) => (v.lambda_z[i] * r.lambda_z[i] - r.z[i]) / zi); // Z^-1 (L_z r_lambda_z - r_z)
-    const rhs1 = r.x.map((rxi, i) => -(rxi + yPart[i] + zPart[i]));
+    const yPart = v.y.map((yi, i) => (r.y[i] - v.lambda_y[i] * r.lambda_y[i]) / yi); // Y^-1 (r_y L_y r_lambda_y)
+    const zPart = v.z.map((zi, i) => (r.z[i] - v.lambda_z[i] * r.lambda_z[i]) / zi); // Z^-1 (r_z L_z r_lambda_z)
+    const rhs1 = r.x.map((rxi, i) => zPart[i] -rxi - yPart[i]);
     
     const gtPart = v.g.map((gi, i) => v.lambda_g[i] / gi + v.lambda_t[i] / v.t[i]); // G^-1 L_g  + T^-1 L_t
-    const gPart = v.g.map((gi, i) => (v.lambda_g[i] * r.lambda_g[i] + r.g[i]) / gi); // G^-1 (L_g r_lambda_g + r_g)
-    const tPart = v.t.map((ti, i) => (v.lambda_t[i] * r.lambda_t[i] - r.t[i]) / ti); // T^-1 (L_t r_lambda_t - r_t)
-    const sPart = r.s.map((rsi, i) => rsi + tPart[i] + gPart[i]);
-    const rhs2 = r.lambda_A.map((rLambda_Ai, i) => -(rLambda_Ai + sPart[i] / gtPart[i]));
+    const gPart = v.g.map((gi, i) => (r.g[i] - v.lambda_g[i] * r.lambda_g[i]) / gi); // G^-1 (r_g - L_g r_lambda_g)
+    const tPart = v.t.map((ti, i) => (r.t[i] - v.lambda_t[i] * r.lambda_t[i]) / ti); // T^-1 (r_t - L_t r_lambda_t)
+    const sPart = r.s.map((rsi, i) => -rsi + tPart[i] - gPart[i]);
+    const rhs2 = r.lambda_A.map((rLambda_Ai, i) => -rLambda_Ai + sPart[i] / gtPart[i]);
 
     const rhs = [...rhs1, ...rhs2];
 
@@ -119,11 +119,11 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
 
     d.x = delta.slice(0, n);
     d.lambda_A = delta.slice(n, n + m);
-    d.s = d.lambda_A.map((dLambda_Ai, i) => (dLambda_Ai - sPart[i]) / gtPart[i]);
-    d.lambda_g = lA.map((lAi, i) => lAi === null ? 0.0 : -(v.lambda_g[i] * (d.s[i] + r.lambda_g[i]) + r.g[i]) / v.g[i]);
-    d.lambda_t = uA.map((uAi, i) => uAi === null ? 0.0 : (v.lambda_t[i] * (d.s[i] + r.lambda_t[i]) - r.t[i]) / v.t[i]);
-    d.lambda_y = lx.map((lxi, i) => lxi === null ? 0.0 : -(v.lambda_y[i] * (d.x[i] + r.lambda_y[i]) + r.y[i]) / v.y[i]);
-    d.lambda_z = ux.map((uxi, i) => uxi === null ? 0.0 : (v.lambda_z[i] * (d.x[i] + r.lambda_z[i]) - r.z[i]) / v.z[i]);
+    d.s = d.lambda_A.map((dLambda_Ai, i) => (dLambda_Ai + sPart[i]) / gtPart[i]);
+    d.lambda_g = lA.map((lAi, i) => lAi === null ? 0.0 : -(v.lambda_g[i] * (d.s[i] - r.lambda_g[i]) + r.g[i]) / v.g[i]);
+    d.lambda_t = uA.map((uAi, i) => uAi === null ? 0.0 : -(v.lambda_t[i] * (-d.s[i] - r.lambda_t[i]) + r.t[i]) / v.t[i]);
+    d.lambda_y = lx.map((lxi, i) => lxi === null ? 0.0 : -(v.lambda_y[i] * (d.x[i] - r.lambda_y[i]) + r.y[i]) / v.y[i]);
+    d.lambda_z = ux.map((uxi, i) => uxi === null ? 0.0 : -(v.lambda_z[i] * (-d.x[i] - r.lambda_z[i]) + r.z[i]) / v.z[i]);
     d.g = lA.map((lAi, i) => lAi === null ? 0.0 : -(v.g[i] * d.lambda_g[i] + r.g[i]) / v.lambda_g[i]);
     d.t = uA.map((uAi, i) => uAi === null ? 0.0 : -(v.t[i] * d.lambda_t[i] + r.t[i]) / v.lambda_t[i]);
     d.y = lx.map((lxi, i) => lxi === null ? 0.0 : -(v.y[i] * d.lambda_y[i] + r.y[i]) / v.lambda_y[i]);
@@ -148,7 +148,7 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
   };
   
   const getMu = (v) =>
-    (m > 0 ? (dot(v.g, v.lambda_g) + dot(v.t, v.lambda_t)) / (2 * m) : 0.0) + (n > 0 ? (dot(v.y, v.lambda_y) + dot(v.z, v.lambda_z)) / (2 * n) : 0.0);
+    ((m > 0 ? (dot(v.g, v.lambda_g) + dot(v.t, v.lambda_t)) : 0.0) + (n > 0 ? (dot(v.y, v.lambda_y) + dot(v.z, v.lambda_z)) : 0.0)) / (2 * n + 2 * m);
 
   const getResidualNorm = (r) =>
     norm([].concat(r.x, r.s, r.g, r.t, r.y, r.z, r.lambda_A, r.lambda_g, r.lambda_t, r.lambda_y, r.lambda_z));
@@ -160,13 +160,16 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
     const alphaT = getMaxStepSingle(v.t, dv.t);
     const alphaY = getMaxStepSingle(v.y, dv.y);
     const alphaZ = getMaxStepSingle(v.z, dv.z);
-    const alphaP = Math.min(alphaG, alphaT, alphaY, alphaZ);
+    let alphaP = Math.min(alphaG, alphaT, alphaY, alphaZ);
 
     const alphaLambdaG = getMaxStepSingle(v.lambda_g, dv.lambda_g);
     const alphaLambdaT = getMaxStepSingle(v.lambda_t, dv.lambda_t);
     const alphaLambdaY = getMaxStepSingle(v.lambda_y, dv.lambda_y);
     const alphaLambdaZ = getMaxStepSingle(v.lambda_z, dv.lambda_z);
-    const alphaD = Math.min(alphaLambdaG, alphaLambdaT, alphaLambdaY, alphaLambdaZ);
+    let alphaD = Math.min(alphaLambdaG, alphaLambdaT, alphaLambdaY, alphaLambdaZ);
+
+    alphaP = Math.min(alphaP, alphaD);
+    alphaD = alphaP
     
     return { alphaP, alphaD };
   };
