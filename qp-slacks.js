@@ -99,11 +99,11 @@ function interiorPointQP(H, c, A, lA, uA, lx, ux, tol=1e-8, maxIter=100) {
 
   // Define the function for computing the search direction
   const computeSearchDirection = (L, ipivOrD, v, r) => {
-    const yPart = v.y.map((yi, i) => (r.y[i] - v.lambda_y[i] * r.lambda_y[i]) / yi); // Y^-1 (r_y L_y r_lambda_y)
-    const zPart = v.z.map((zi, i) => (r.z[i] - v.lambda_z[i] * r.lambda_z[i]) / zi); // Z^-1 (r_z L_z r_lambda_z)
+    const yPart = v.y.map((yi, i) => (r.y[i] - v.lambda_y[i] * r.lambda_y[i]) / yi); // Y^-1 (r_y - L_y r_lambda_y)
+    const zPart = v.z.map((zi, i) => (r.z[i] - v.lambda_z[i] * r.lambda_z[i]) / zi); // Z^-1 (r_z - L_z r_lambda_z)
     const rhs1 = r.x.map((rxi, i) => zPart[i] -rxi - yPart[i]);
     
-    const gtPart = v.g.map((gi, i) => v.lambda_g[i] / gi + v.lambda_t[i] / v.t[i]); // G^-1 L_g  + T^-1 L_t
+    const gtPart = v.g.map((gi, i) => v.lambda_g[i] / gi + v.lambda_t[i] / v.t[i]); // G^-1 L_g + T^-1 L_t
     const gPart = v.g.map((gi, i) => (r.g[i] - v.lambda_g[i] * r.lambda_g[i]) / gi); // G^-1 (r_g - L_g r_lambda_g)
     const tPart = v.t.map((ti, i) => (r.t[i] - v.lambda_t[i] * r.lambda_t[i]) / ti); // T^-1 (r_t - L_t r_lambda_t)
     const sPart = r.s.map((rsi, i) => -rsi + tPart[i] - gPart[i]);
